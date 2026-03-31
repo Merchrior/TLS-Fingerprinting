@@ -74,8 +74,8 @@ The system operates as a continuous, asynchronous pipeline:
 ### Local Deployment (Docker)
 1. **Clone the repository:**
 
-    git clone [https://github.com/AhmetCanCengiz/TLS-Project.git](https://github.com/AhmetCanCengiz/TLS-Project.git)
-    cd TLS-Project
+    git clone https://github.com/Merchrior/TLS-Fingerprinting
+    cd tls-fingerprinting
 
 2. **Start the entire stack (App + Database):**
 
@@ -107,7 +107,7 @@ This project is developed for academic and research purposes only. The tools pro
 ---
 
 ## Author
-**Ahmet Can Cengiz**
-Computer Engineering Student at **Ankara Bilim University**
-*Expected Graduation: Summer 2026*
-[LinkedIn](https://www.linkedin.com/in/ahmet-can-cengiz-61a58a2a2/) | [GitHub](https://github.com/charliistone)
+* **Ahmet Can Cengiz**
+* Computer Engineering Student at **Ankara Bilim University**
+* Expected Graduation: Summer 2026*
+* [LinkedIn](https://www.linkedin.com/in/ahmet-can-cengiz-61a58a2a2/) | [GitHub](https://github.com/charliistone)
