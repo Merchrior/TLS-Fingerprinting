@@ -1,0 +1,7 @@
+pyyaml==6.0.1
+watchdog==4.0.0
+scapy==2.5.0
+cryptography==42.0.5
+kubernetes==29.0.0
+streamlit==1.33.0
+pandas==2.2.1

@@ -1,5 +1,70 @@
 import streamlit as st
 import pandas as pd
+<<<<<<< HEAD
+import sqlite3
+import sys
+import os
+
+sys.path.append(os.getcwd())
+from app.core.config_loader import Config
+
+st.set_page_config(page_title="TLS GUARD | Live Tracker", layout="wide")
+
+@st.cache_resource
+def get_db_path():
+    return Config().data['system']['database_path']
+
+st.markdown("""
+<style>
+    @import url('https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css');
+    :root { --bg-main: #1E1E2E; --text-primary: #CDD6F4; --accent: #89B4FA; --green: #A6E3A1; --yellow: #F9E2AF;}
+    .stApp { background-color: var(--bg-main); color: var(--text-primary); }
+    .metric-card { background-color: #313244; padding: 20px; border-radius: 8px; border-left: 4px solid var(--accent); margin-bottom: 20px;}
+    .metric-value { color: #FFFFFF; font-size: 24px; font-weight: bold; margin-top: 5px;}
+    .metric-title { color: #A6ADC8; font-size: 13px; text-transform: uppercase; font-weight: 700;}
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown("<h1><i class='bi bi-activity'></i> TLS Framework Dashboard</h1>", unsafe_allow_html=True)
+
+try:
+    db_path = get_db_path()
+    with sqlite3.connect(db_path) as conn:
+        # İki farklı tabloyu çekiyoruz
+        df_live = pd.read_sql_query("SELECT timestamp, src_ip, dst_ip, ja3_hash, status FROM live_traffic ORDER BY timestamp DESC LIMIT 15", conn)
+        df_whitelist = pd.read_sql_query("SELECT ja3_hash, app_label, confidence, discovery_time FROM whitelist ORDER BY discovery_time DESC LIMIT 10", conn)
+
+    # --- ÜST KISIM: CANLI METRİKLER ---
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.markdown(f"<div class='metric-card'><div class='metric-title'>Live Packets Parsed</div><div class='metric-value'>{len(df_live)} (Recent)</div></div>", unsafe_allow_html=True)
+    with c2:
+        st.markdown(f"<div class='metric-card' style='border-left-color:var(--yellow)'><div class='metric-title'>Signatures in DB</div><div class='metric-value' style='color:var(--yellow)'>{len(df_whitelist)}</div></div>", unsafe_allow_html=True)
+    with c3:
+        st.markdown(f"<div class='metric-card' style='border-left-color:var(--green)'><div class='metric-title'>AI Discovery Node</div><div class='metric-value' style='color:var(--green)'>ACTIVE (K8s)</div></div>", unsafe_allow_html=True)
+
+    # --- ORTA KISIM: LIVE TRAFFIC TRACKER ---
+    st.markdown("### <i class='bi bi-broadcast'></i> Live Traffic & Hashing", unsafe_allow_html=True)
+    if not df_live.empty:
+        st.dataframe(df_live, use_container_width=True, hide_index=True)
+    else:
+        st.info("Waiting for live network traffic... Generating PCAPs...")
+
+    st.write("---")
+
+    # --- ALT KISIM: AI-VERIFIED WHITELIST ---
+    st.markdown("### <i class='bi bi-shield-check'></i> AI-Verified Fast-Path Database", unsafe_allow_html=True)
+    if not df_whitelist.empty:
+        st.dataframe(df_whitelist, use_container_width=True, hide_index=True)
+    else:
+        st.info("Whitelist is empty. Waiting for AI to verify signatures with >90% confidence.")
+
+except Exception as e:
+    st.error(f"Database Error: {e}")
+
+if st.button("🔄 Refresh Dashboards"):
+    st.rerun()
+=======
 import numpy as np
 import sys
 import os
@@ -120,3 +185,4 @@ if "# live-traffic" in page:
 elif "# threat-history" in page:
     st.markdown("<h1><i class='bi bi-archive'></i> Threat Archive</h1>", unsafe_allow_html=True)
     st.info("Historical data module is under construction.")
+>>>>>>> upstream/main_v2
