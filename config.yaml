@@ -1,0 +1,11 @@
+system:
+  interface: "en0"
+  pcap_directory: "./data/pcaps"
+  database_path: "./data/fingerprints.db"
+  tshark_file_size_kb: 500       # 500 KB limit
+  tshark_duration_sec: 3
+
+ai_kubernetes:
+  namespace: "ai-discovery"
+  confidence_threshold: 0.90
+  scale_to_zero_minutes: 5

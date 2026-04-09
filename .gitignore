@@ -1,3 +1,11 @@
+<<<<<<< HEAD
+venv/
+__pycache__/
+.DS_Store
+data/pcaps/*.pcap
+data/fingerprints.db
+framework_activity.log
+=======
 data/raw_pcaps/*.pcap
 data/raw_pcaps/*.cap
 data/logs/*.log
@@ -15,3 +23,4 @@ Thumbs.db
 
 .vscode/
 .idea/
+>>>>>>> upstream/main_v2
