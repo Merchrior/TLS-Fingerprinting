@@ -1,0 +1,18 @@
+version: "3.9"
+
+services:
+  tls-app:
+    build: .
+    container_name: tls-fingerprint-app
+    volumes:
+      - ./data:/app/data
+    environment:
+      DB_PATH: /app/data/tls_fingerprint.db
+      CAPTURE_DIR: /app/data/captures
+      PROCESSED_DIR: /app/data/processed
+      DASHBOARD_PORT: 8501
+      CAPTURE_OWNER: host
+      TSHARK_PATH: /usr/bin/tshark
+    ports:
+      - "8501:8501"
+    command: ["python", "-m", "app.main", "--with-dashboard", "--capture-owner", "host"]

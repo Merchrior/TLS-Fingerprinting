@@ -1,0 +1,101 @@
+# ----------------------------
+# Python
+# ----------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Packaging / build
+build/
+dist/
+.eggs/
+*.egg-info/
+pip-wheel-metadata/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# Type checker / linter caches
+.mypy_cache/
+.ruff_cache/
+.pyre/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# ----------------------------
+# IDE / Editor
+# ----------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ----------------------------
+# OS files
+# ----------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ----------------------------
+# Environment / secrets
+# ----------------------------
+.env
+.env.*
+!.env.example
+
+# ----------------------------
+# Local runtime data
+# ----------------------------
+data/*
+!data/.gitkeep
+!data/captures/
+!data/captures/.gitkeep
+!data/processed/
+!data/processed/.gitkeep
+!data/runtime/
+!data/runtime/.gitkeep
+
+# Ignore generated runtime/database/capture files
+data/**/*.db
+data/**/*.sqlite
+data/**/*.sqlite3
+data/**/*.pcap
+data/**/*.pcapng
+data/runtime/*.json
+data/runtime/*.tmp
+
+# ----------------------------
+# Logs
+# ----------------------------
+*.log
+logs/
+nohup.out
+
+# ----------------------------
+# Streamlit
+# ----------------------------
+.streamlit/secrets.toml
+
+# ----------------------------
+# Docker local overrides
+# ----------------------------
+docker-compose.override.yml
+
+# ----------------------------
+# Project-specific old / generated artifacts
+# ----------------------------
+saved_models/
