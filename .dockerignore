@@ -1,7 +1,9 @@
 .git
-__pycache__
+__pycache__/
 data/
 tests/
 venv/
 *.pyc
 .env
+*.pcap
+saved_models/

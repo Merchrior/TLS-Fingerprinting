@@ -1,17 +1,39 @@
-data/raw_pcaps/*.pcap
-data/raw_pcaps/*.cap
-data/logs/*.log
-data/processed_csvs/*.csv
+# ==========================================
+# 1. BÜYÜK DOSYALAR VE AI MODELLERİ (KRİTİK)
+# ==========================================
+saved_models/
+data/
+*.db
+*.sqlite
+*.sqlite3
 
+# ==========================================
+# 2. AĞ TRAFİĞİ (PCAP) VE LOGLAR
+# ==========================================
+*.pcap
+*.pcapng
+*.cap
+logs/
+*.log
 
+# ==========================================
+# 3. GÜVENLİK VE ORTAM DEĞİŞKENLERİ
+# ==========================================
+.env
+venv/
+env/
+
+# ==========================================
+# 4. PYTHON & IDE KALINTILARI
+# ==========================================
 __pycache__/
 *.pyc
 .ipynb_checkpoints
-
-
+.vscode/
+.idea/
 .DS_Store
 Thumbs.db
 
-
-.vscode/
-.idea/
+# data ve saved_models klasör yapısını koru, ama içindeki dosyaları yoksay
+!data/.gitkeep
+!saved_models/.gitkeep

@@ -1,5 +1,5 @@
 services:
-  # Main App (AI & Sniffer)
+  # Main App (AI Core, Sniffer, & Dashboard)
   tls-app:
     build:
       context: .
@@ -7,21 +7,24 @@ services:
     container_name: tls_analyzer
     volumes:
       - .:/app              # (Hot-reload)
-      - ./data:/app/data    # Non-volatile storage for captured PCAP files
+      - ./data:/app/data    # Non-volatile storage (Your 3GB fingerprints.db goes here!)
+      - ./saved_models:/app/saved_models # CRITICAL: Caches the 1.5GB Hugging Face model
     environment:
       - PYTHONUNBUFFERED=1  # Being able to see logs instantly on the terminal
       - DB_URL=postgresql://user:pass@db:5432/tls_db
+      - HF_HOME=/app/saved_models # Tells transformers library where to look
+      - DB_HOST=db
     # --- Critical Settings ---
-    network_mode: "host"    # For listening the PC's network card directly
-    privileged: true        # Kernel authorities for packet capturing (sniffing)
-    # ----------------------
+    #network_mode: "host"    # For listening the PC's network card directly
+    #privileged: true        # Kernel authorities for packet capturing (sniffing)
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
     depends_on:
       - db
-    ports:
-      - "8051:8051"
-    command: streamlit run app/ui/dashboard.py
+    command: python -m app.main
 
-  # Database
+  # Database (For UI Storage)
   db:
     image: postgres:15-alpine
     container_name: tls_db
@@ -33,6 +36,19 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
+  dashboard:
+    build: .
+    container_name: tls_dashboard
+    # Command to boot up the Streamlit web server
+    command: streamlit run app/ui/dashboard.py --server.port=8501 --server.address=0.0.0.0
+    volumes:
+      - ./data:/app/data  # Shares the exact same DB folder as the analyzer
+      - .:/app            # Mounts your code so the UI updates instantly if you change it
+    ports:
+      - "8501:8501"       # Exposes the UI to your browser
+    depends_on:
+      - tls-app     # Ensures the backend boots up first
 
 volumes:
   postgres_data:
