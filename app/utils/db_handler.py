@@ -28,19 +28,56 @@ class DatabaseManager:
             logging.error(f"Could not connect to PostgreSQL: {e}")
 
     def _create_schema(self):
-        """Initializes the database table if it doesn't exist."""
-        query = """
+        """Initializes the database tables if they don't exist."""
+        # 1. Update existing table to include dst_port
+        query_events = """
         CREATE TABLE IF NOT EXISTS tls_events (
             id SERIAL PRIMARY KEY,
             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             src_ip VARCHAR(45),
             dst_ip VARCHAR(45),
+            dst_port INTEGER,
             ja3_hash VARCHAR(32),
             prediction VARCHAR(50),
             threat_level VARCHAR(20)
         );
         """
-        self.execute_query(query)
+        # Try to add dst_port if the table already exists from earlier
+        try:
+            self.execute_query("ALTER TABLE tls_events ADD COLUMN dst_port INTEGER;")
+        except:
+            pass # Column already exists, ignore error
+            
+        # 2. Add System Logs table for the UI Console
+        query_logs = """
+        CREATE TABLE IF NOT EXISTS system_logs (
+            id SERIAL PRIMARY KEY,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            level VARCHAR(20),
+            component VARCHAR(50),
+            message TEXT
+        );
+        """
+        # 3. Add system_config (from our previous fix)
+        query_config = """
+        CREATE TABLE IF NOT EXISTS system_config (
+            key VARCHAR(50) PRIMARY KEY,
+            value TEXT
+        );
+        """
+        self.execute_query(query_events)
+        self.execute_query(query_logs)
+        self.execute_query(query_config)
+
+    def log_system_message(self, level, component, message):
+        """Writes backend logs to Postgres so the UI can display them."""
+        query = "INSERT INTO system_logs (level, component, message) VALUES (%s, %s, %s)"
+        self.execute_query(query, (level, component, message))
+
+    def log_event(self, src, dst, dst_port, ja3, pred="Analyzing", threat="Unknown"):
+        """Logs a single TLS event to the database (Updated to include port)."""
+        query = "INSERT INTO tls_events (src_ip, dst_ip, dst_port, ja3_hash, prediction, threat_level) VALUES (%s, %s, %s, %s, %s, %s)"
+        self.execute_query(query, (src, dst, dst_port, ja3, pred, threat))
 
     def execute_query(self, query, params=None):
         """Thread-safe query execution."""
@@ -54,20 +91,6 @@ class DatabaseManager:
             conn.rollback()
         finally:
             self.connection_pool.putconn(conn)
-
-    def log_event(self, src, dst, ja3, pred="Analyzing", threat="Unknown"):
-        """Logs a single TLS event to the database."""
-        query = "INSERT INTO tls_events (src_ip, dst_ip, ja3_hash, prediction, threat_level) VALUES (%s, %s, %s, %s, %s)"
-        self.execute_query(query, (src, dst, ja3, pred, threat))
-    def _create_schema(self):
-    # Mevcut tls_events tablosunun yanına şu tabloyu ekleyin:
-        query = """
-    CREATE TABLE IF NOT EXISTS system_config (
-        key VARCHAR(50) PRIMARY KEY,
-        value TEXT
-    );
-    """
-        self.execute_query(query)
 
     def set_config(self, key, value):
         query = """

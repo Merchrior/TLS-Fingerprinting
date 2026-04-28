@@ -98,8 +98,12 @@ def start_pcap_watcher(directory="/app/data"):
             if file_name in processed_files:
                 continue
                 
-            if time.time() - os.path.getmtime(file_path) > 2:
-                try:
+            try:
+                # Dosya biz bakarken silinmiş mi diye kontrol et
+                if not os.path.exists(file_path):
+                    continue
+                    
+                if time.time() - os.path.getmtime(file_path) > 2:
                     records = process_pcap_file(file_path)
                     
                     for record in records:
@@ -136,15 +140,17 @@ def start_pcap_watcher(directory="/app/data"):
                         db.log_event(
                             src=record.get('src_ip'), 
                             dst=record.get('dst_ip'), 
+                            dst_port=record.get('dst_port'),
                             ja3=record.get('ja3_hash'),
                             pred=final_pred,           
                             threat="Safe"              
                         )
                     
                     logging.info(f"Successfully processed {len(records)} records from {file_name}")
+                    db.log_system_message("INFO", "watcher", f"Processed PCAP: {file_name} ({len(records)} events)")
                     processed_files.add(file_name)
                     
-                except Exception as e:
+            except Exception as e:
                     logging.error(f"Error processing {file_name}: {e}")
 
         time.sleep(5)

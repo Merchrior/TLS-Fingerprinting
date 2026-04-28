@@ -93,8 +93,32 @@ class UIDatabaseAdapter:
     def set_many_config(self, d):
         for k, v in d.items():
             self.set_config(k, v)
-    def get_port_distribution(self, limit=10): return [] 
-    def get_recent_logs(self, limit=10, level=None, component=None): return []
+    def get_port_distribution(self, limit=10):
+        # Groups traffic by destination port for the Pie Chart
+        return self._fetch("""
+            SELECT dst_port, COUNT(*) as hit_count 
+            FROM tls_events 
+            WHERE dst_port IS NOT NULL 
+            GROUP BY dst_port 
+            ORDER BY hit_count DESC 
+            LIMIT %s
+        """, (limit,))
+
+    def get_recent_logs(self, limit=10, level=None, component=None):
+        # Fetches backend logs for the System Console
+        query = "SELECT timestamp, level, component, message FROM system_logs WHERE 1=1"
+        params = []
+        if level:
+            query += " AND level = %s"
+            params.append(level)
+        if component:
+            query += " AND component = %s"
+            params.append(component)
+            
+        query += " ORDER BY timestamp DESC LIMIT %s"
+        params.append(limit)
+        
+        return self._fetch(query, tuple(params))
     def get_last_processed_pcap(self): return None
     def get_pcap_files(self, limit=10, status=None): return []
     def get_recent_unique_fingerprints(self, limit=10): return []
@@ -997,23 +1021,25 @@ def render_settings(db: UIDatabaseAdapter) -> None:
     }
 
     with col_save:
-        if st.button("Save Only", use_container_width=True, key="settings_save_only"):
+        if st.button("Save Config Only", use_container_width=True):
             db.set_many_config(config_payload)
-            st.success(f"Settings saved. Interface: {effective_interface or 'Not Set'}")
+            st.success("Ayarlar veritabanına kaydedildi.")
             st.rerun()
 
     with col_apply:
-        if st.button("Save & Apply", use_container_width=True):
-        # Ayarları kaydet
+        if st.button("▶ BAŞLAT (TShark)", type="primary", use_container_width=True):
             db.set_many_config(config_payload)
-        # Sniffer'ı tetikleyecek komutu veritabanına yaz
             db.set_config("sniffing_command", "START") 
-            st.success("Komut gönderildi: Paket yakalama başlatılıyor...")
+            st.success("TShark Başlatma emri gönderildi...")
+            
+        if st.button("⏹ DURDUR", use_container_width=True):
+            db.set_config("sniffing_command", "STOP")
+            st.warning("Durdurma emri gönderildi.")
 
     with col_demo:
-        if st.button("Seed Demo Whitelist", use_container_width=True, key="settings_seed_demo"):
+        if st.button("Seed Demo Whitelist", use_container_width=True):
             db.seed_sample_whitelist()
-            st.success("Sample whitelist entries added.")
+            st.success("Örnek whitelist eklendi.")
 
     st.info(
         "Notes: Interface numbering changes from device to device. "
