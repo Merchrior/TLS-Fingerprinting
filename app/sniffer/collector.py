@@ -86,6 +86,7 @@ def extract_features(packet):
             
             # 1. Get Destination IP
             dst_ip = packet[IP].dst if packet.haslayer(IP) else None
+            packet_size = len(packet)
             
             # 2. Extract Ciphers (With Translation)
             if hasattr(layer, 'ciphers'):
@@ -108,8 +109,8 @@ def extract_features(packet):
             if hasattr(layer, 'extensions'):
                 for ext in layer.extensions:
                     features.append(ext.name)
-            
-            return features, dst_ip
+                    
+            return features, dst_ip, [packet_size, 0, 0]
             
     except Exception as e:
         logging.debug(f"[Extractor Error] {e}")

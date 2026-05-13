@@ -170,59 +170,15 @@ def resolve_tshark_path(db: UIDatabaseAdapter) -> str:
 
 
 def get_detected_interfaces(db: UIDatabaseAdapter) -> List[dict]:
-    """
-    Öncelik:
-    1. Host capture agent tarafından paylaşılan JSON dosyası
-    2. Native / non-docker kullanımda local tshark -D fallback
-    """
-    runtime_file = Path("data/runtime/detected_interfaces.json")
-
-    if runtime_file.exists():
+    import json
+    # Ajanın veritabanına yazdığı JSON listesini çekiyoruz!
+    raw_data = db.get_config("available_interfaces", "")
+    if raw_data:
         try:
-            data = json.loads(runtime_file.read_text(encoding="utf-8"))
-            if isinstance(data, list):
-                return data
+            return json.loads(raw_data)
         except Exception:
-            pass
-
-    tshark_path = resolve_tshark_path(db)
-
-    try:
-        result = subprocess.run(
-            [tshark_path, "-D"],
-            capture_output=True,
-            text=True,
-            encoding="utf-8"
-        )
-    except FileNotFoundError:
-        return []
-    except Exception:
-        return []
-
-    if result.returncode != 0:
-        return []
-
-    interfaces = []
-    for raw_line in result.stdout.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-
-        parts = line.split(". ", 1)
-        if len(parts) == 2 and parts[0].isdigit():
-            interfaces.append({
-                "index": parts[0],
-                "label": parts[1],
-                "display": line
-            })
-        else:
-            interfaces.append({
-                "index": "",
-                "label": line,
-                "display": line
-            })
-
-    return interfaces
+            return []
+    return []
 
 
 def get_current_config(db: UIDatabaseAdapter) -> dict:
@@ -949,7 +905,7 @@ def render_settings(db: UIDatabaseAdapter) -> None:
             format_func=lambda x: interface_label_map.get(x, x)
         )
         detected_df = pd.DataFrame(detected_interfaces)
-        st.dataframe(detected_df[["index", "label"]], use_container_width=True, hide_index=True)
+        st.dataframe(detected_df[["index", "display"]], use_container_width=True, hide_index=True)
     else:
         st.warning(
             "TShark ile interface listesi alınamadı. TShark yolu yanlış olabilir ya da cihazda kurulu olmayabilir. "

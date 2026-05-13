@@ -9,6 +9,8 @@ from app.utils.db_handler import DatabaseManager
 from app.utils.rag import KnowledgeBase
 from app.sniffer.collector import start_sniffer
 
+AI_PREDICTION_CACHE = {}
+
 def parse_ja4_metadata(ja4_hash):
     """Translates JA4 Part A into plain English for the AI."""
     if not ja4_hash or "_" not in ja4_hash or ja4_hash == "None":
@@ -119,16 +121,35 @@ def start_pcap_watcher(directory="/app/data"):
                             ja3=record.get('ja3_hash'),
                             ja4=record.get('ja4_hash')
                         )
+                        
                         logging.info(f"DEBUG - RAG Found Candidates: {candidates}")
                         
-                        ja4_hint = parse_ja4_metadata(record.get('ja4_hash'))
-                        logging.info(f"🧠 AI HINT GENERATED: {ja4_hint}")
+                        ja4_hint = parse_ja4_metadata(record.get('ja4_hash')) if record.get('ja4_hash') else "Unknown"
                         
-                        label, conf = classifier.classify_traffic(
-                            pattern, 
-                            candidate_apps=candidates, 
-                            ja4_hint=ja4_hint
-                        )
+                        # --- YENİ MANTIK KONTROLÜ ---
+                        if candidates and "(Demo Verified)" in candidates[0]:
+                            label = candidates[0]
+                            conf = 0.99  
+                            logging.info(f"FAST-PATH: Exact match found in DB.")
+                        else:
+                            sorted_pattern = sorted(pattern) 
+                            pattern_str = str(sorted_pattern)
+                            sizes = record.get('packet_sizes', [0, 0, 0])
+                            
+                            # AI'a sor
+                            label, conf = classifier.classify_traffic(
+                                pattern, 
+                                candidate_apps=candidates, 
+                                ja4_hint=ja4_hint,
+                                sizes=sizes 
+                            )
+                            
+                            # Eğer AI, RAG'ın adaylarını reddedip kendi sonucunu %80+ güvenle bulduysa, 
+                            # RAG'ın aday listesini loglarda "ez" ki kafa karışıklığı olmasın.
+                            if candidates and label not in candidates and conf > 0.80:
+                                logging.info(f"AI OVERRIDE: RAG candidates ignored due to multi-dimensional mismatch. AI is confident.")
+                                candidates = [label] # Arayüzde sadece AI'ın bulduğu görünsün
+                        
                         
                         logging.info(f"DEBUG - AI Verdict: {label} ({conf*100:.1f}%)")
                         

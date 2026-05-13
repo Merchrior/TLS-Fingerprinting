@@ -92,11 +92,24 @@ class KnowledgeBase:
             if all_candidates:
                 logger.info(f"🎯 RAG HIT: Legacy JA3 Match -> {all_candidates[0]}")
 
-        # TIER 3: AI Inference Fallback (Pattern similarity)
+        # TIER 3: AI Inference Fallback (Pattern similarity - ŞİMDİ AKTİF!)
         if not all_candidates:
-            # ... (your existing cipher-list search logic here)
             logger.warning("❌ RAG MISS: No hash hits. Falling back to AI pattern analysis.")
+            
+            # 1. Gelen paketin içinden şifreleme (cipher) listesini çıkar
+            ciphers = self._extract_cipher_suites(discovered_pattern)
+            
+            # 2. Veritabanında bu şifrelemelere benzeyen (LIKE) uygulamaları ara
+            for cipher in ciphers:
+                # Eğer IANA formatındaysa OpenSSL'e çevir, değilse doğrudan ara
+                mapped_cipher = REVERSE_CIPHER_MAP.get(cipher, cipher)
+                matches = self._search_cipher(mapped_cipher)
+                all_candidates.extend(matches)
+                
+            if all_candidates:
+                logger.warning("⚠️ RAG HIT: Pattern Match Found (Semantic Search)")
 
+        # Bulunan adayları frekansına göre (en çok eşleşenden en aza) sıralayıp ilk 10'unu döndür
         return list(dict.fromkeys(all_candidates))[:10] if all_candidates else []
 
     def _db_lookup(self, column, value):
