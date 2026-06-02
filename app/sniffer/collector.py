@@ -110,7 +110,7 @@ def extract_features(packet):
                 for ext in layer.extensions:
                     features.append(ext.name)
                     
-            return features, dst_ip, [packet_size, 0, 0]
+            return features, dst_ip
             
     except Exception as e:
         logging.debug(f"[Extractor Error] {e}")

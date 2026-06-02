@@ -134,14 +134,12 @@ def start_pcap_watcher(directory="/app/data"):
                         else:
                             sorted_pattern = sorted(pattern) 
                             pattern_str = str(sorted_pattern)
-                            sizes = record.get('packet_sizes', [0, 0, 0])
                             
                             # AI'a sor
                             label, conf = classifier.classify_traffic(
                                 pattern, 
                                 candidate_apps=candidates, 
                                 ja4_hint=ja4_hint,
-                                sizes=sizes 
                             )
                             
                             # Eğer AI, RAG'ın adaylarını reddedip kendi sonucunu %80+ güvenle bulduysa, 

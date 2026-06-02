@@ -89,7 +89,7 @@ def process_pcap_file(pcap_file: str) -> List[Dict]:
                             
                 discovered_pattern = ciphers + exts
                 ja3_raw = "-".join([str(c) for c in (getattr(hello, 'ciphers', []))])
-                packet_size = len(pkt)
+                
                 
                 records.append({
                     "src_ip": pkt[IP].src,
@@ -99,7 +99,6 @@ def process_pcap_file(pcap_file: str) -> List[Dict]:
                     "ja3_hash": md5hex(ja3_raw),
                     "ja4_hash": generate_ja4(hello),
                     "discovered_pattern": discovered_pattern,
-                    "packet_sizes": [packet_size, 0, 0],
                     "raw_metadata": json.dumps({"pattern": discovered_pattern})
                 })
     
