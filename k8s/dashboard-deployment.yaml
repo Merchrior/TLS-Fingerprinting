@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tls-dashboard
+  namespace: tls-fingerprinting
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tls-dashboard
+  template:
+    metadata:
+      labels:
+        app: tls-dashboard
+    spec:
+      containers:
+        - name: dashboard
+          image: localhost:5000/dashboard:v2
+          imagePullPolicy: Always
+          command:
+            - streamlit
+            - run
+            - app/ui/dashboard.py
+            - --server.port=8501
+            - --server.address=0.0.0.0
+          ports:
+            - containerPort: 8501
+          envFrom:
+            - configMapRef:
+                name: tls-config
+            - secretRef:
+                name: tls-secrets
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tls-dashboard
+  namespace: tls-fingerprinting
+spec:
+  type: NodePort
+  selector:
+    app: tls-dashboard
+  ports:
+    - port: 8501
+      targetPort: 8501
+      nodePort: 30851

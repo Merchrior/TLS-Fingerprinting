@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tls-app
+  namespace: tls-fingerprinting
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tls-app
+  template:
+    metadata:
+      labels:
+        app: tls-app
+    spec:
+      containers:
+        - name: tls-app
+          image: localhost:5000/tls-app:v2
+          imagePullPolicy: Always
+          command: ["python", "-m", "app.main"]
+          envFrom:
+            - configMapRef:
+                name: tls-config
+            - secretRef:
+                name: tls-secrets
+          volumeMounts:
+            - name: pcap-data
+              mountPath: /app/data
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+      volumes:
+        - name: pcap-data
+          emptyDir:
+            sizeLimit: 5Gi

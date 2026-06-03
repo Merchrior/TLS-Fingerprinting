@@ -1,9 +1,10 @@
 .git
 __pycache__/
+*.pyc
 data/
 tests/
 venv/
-*.pyc
 .env
 *.pcap
+*.pcapng
 saved_models/

@@ -5,6 +5,7 @@ import os
 import json # <-- YENİ EKLENDİ
 
 DB_HOST = "localhost"
+DB_PORT = 30543
 DB_NAME = "tls_db"
 DB_USER = "user"
 DB_PASS = "pass"
@@ -45,7 +46,7 @@ def run_agent():
 
     while True:
         try:
-            with psycopg2.connect(host=DB_HOST, dbname=DB_NAME, user=DB_USER, password=DB_PASS) as conn:
+            with psycopg2.connect(host=DB_HOST, port=DB_PORT, dbname=DB_NAME, user=DB_USER, password=DB_PASS) as conn:
                 with conn.cursor() as cur:
                     
                     # --- YENİ: Başlangıçta arayüze listeyi gönder ---

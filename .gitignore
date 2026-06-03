@@ -8,13 +8,15 @@ data/
 *.sqlite3
 
 # ==========================================
-# 2. AĞ TRAFİĞİ (PCAP) VE LOGLAR
+# 2. AĞ TRAFİĞİ (PCAP) VE ÇIKTILAR (LOGS/RESULTS)
 # ==========================================
 *.pcap
 *.pcapng
 *.cap
 logs/
 *.log
+app.log
+results/
 
 # ==========================================
 # 3. GÜVENLİK VE ORTAM DEĞİŞKENLERİ
@@ -24,13 +26,13 @@ venv/
 env/
 
 # ==========================================
-# 4. PYTHON & IDE KALINTILARI
+# 4. PYTHON, OS & IDE KALINTILARI
 # ==========================================
 __pycache__/
 *.pyc
-.ipynb_checkpoints
 .vscode/
 .idea/
+.ipynb_checkpoints
 .DS_Store
 Thumbs.db
 
