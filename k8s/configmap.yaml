@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tls-config
+  namespace: tls-fingerprinting
+data:
+  # Container içinden Postgres'e clusterIP service ismi ile erişilir
+  DB_HOST: "tls-postgres"
+  DB_PORT: "5432"
+  DB_NAME: "tls_db"
+  PYTHONUNBUFFERED: "1"
+  HF_HOME: "/app/saved_models"
+  BATCH_SIZE: "5"
+  MIN_SUPPORT: "0.6"

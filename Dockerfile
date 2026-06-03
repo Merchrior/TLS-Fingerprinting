@@ -22,7 +22,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Builder stage's libraries
-COPY --from=builder /root/.local /root/.local
+COPY --from=builder /root/.local /root/.local 
+ENV PATH=/root/.local/bin:$PATH
 COPY . .
 
 ENV PATH=/root/.local/bin:$PATH

@@ -6,28 +6,139 @@ from pathlib import Path
 from typing import List, Optional
 
 import pandas as pd
+import psycopg2
+from psycopg2.extras import RealDictCursor
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from app.utils.db_handler import DatabaseManager
+# =====================================================================
+# CUSTOM UI DATABASE ADAPTER (Reads directly from Postgres, touches no backend code)
+# =====================================================================
+class UIDatabaseAdapter:
+    def __init__(self):
+        # Connect directly to the Postgres container setup in docker-compose
+        self.conn_str = f"host={os.getenv('DB_HOST', 'db')} dbname={os.getenv('DB_NAME', 'tls_db')} user={os.getenv('DB_USER', 'user')} password={os.getenv('DB_PASS', 'pass')} port=5432"
 
+    def _fetch(self, query, params=None):
+        try:
+            with psycopg2.connect(self.conn_str) as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(query, params)
+                    return [dict(row) for row in cur.fetchall()]
+        except Exception as e:
+            return []
 
+    # --- REAL DATA FROM YOUR BACKEND (tls_events table) ---
+    def get_summary_metrics(self):
+        total = self._fetch("SELECT COUNT(*) as c FROM tls_events")
+        known = self._fetch("SELECT COUNT(*) as c FROM tls_events WHERE prediction != 'Unknown Traffic'")
+        t_val = total[0]['c'] if total else 0
+        k_val = known[0]['c'] if known else 0
+        return {
+            "total_events": t_val,
+            "known_events": k_val,
+            "unknown_events": t_val - k_val,
+            "active_pcap_jobs": 0, "processed_pcap_count": 0, "candidate_count": 0, "whitelist_count": 0
+        }
+
+    def get_recent_events(self, limit=50):
+        # Map your DB columns to what the UI expects
+        return self._fetch("SELECT timestamp, src_ip, dst_ip, ja3_hash, prediction, threat_level as status FROM tls_events ORDER BY timestamp DESC LIMIT %s", (limit,))
+
+    def get_top_predictions(self, limit=10):
+        return self._fetch("SELECT prediction, COUNT(*) as hit_count FROM tls_events GROUP BY prediction ORDER BY hit_count DESC LIMIT %s", (limit,))
+
+    def get_top_ja3_hashes(self, limit=10):
+        return self._fetch("SELECT ja3_hash, COUNT(*) as hit_count, MAX(prediction) as latest_prediction, MAX(timestamp) as last_seen FROM tls_events GROUP BY ja3_hash ORDER BY hit_count DESC LIMIT %s", (limit,))
+
+    def get_event_trend(self, limit=24):
+        # PostgreSQL syntax to group by hour
+        query = """
+        SELECT date_trunc('hour', timestamp) as hour_bucket, COUNT(*) as event_count 
+        FROM tls_events 
+        GROUP BY hour_bucket 
+        ORDER BY hour_bucket DESC LIMIT %s
+        """
+        return self._fetch(query, (limit,))
+
+    # --- SAFE STUBS FOR UI FEATURES YOU HAVEN'T BUILT YET ---
+    # --- GERÇEK VERİTABANI YAZMA İŞLEMLERİ ---
+    def _execute(self, query, params=None):
+        """Veritabanına veri yazmak için yardımcı fonksiyon"""
+        try:
+            with psycopg2.connect(self.conn_str) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(query, params)
+                    conn.commit()
+        except Exception as e:
+            print(f"DB Execute Error: {e}")
+
+    def set_config(self, key, value):
+        # Tablo yoksa çökmemesi için garantiye alıyoruz
+        self._execute("CREATE TABLE IF NOT EXISTS system_config (key VARCHAR(50) PRIMARY KEY, value TEXT);")
+        
+        query = """
+        INSERT INTO system_config (key, value) VALUES (%s, %s)
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+        """
+        self._execute(query, (key, value))
+
+    def get_config(self, key, default=""):
+        res = self._fetch("SELECT value FROM system_config WHERE key = %s", (key,))
+        if res and len(res) > 0:
+            return res[0]['value']
+        return default
+
+    def set_many_config(self, d):
+        for k, v in d.items():
+            self.set_config(k, v)
+    def get_port_distribution(self, limit=10):
+        # Groups traffic by destination port for the Pie Chart
+        return self._fetch("""
+            SELECT dst_port, COUNT(*) as hit_count 
+            FROM tls_events 
+            WHERE dst_port IS NOT NULL 
+            GROUP BY dst_port 
+            ORDER BY hit_count DESC 
+            LIMIT %s
+        """, (limit,))
+
+    def get_recent_logs(self, limit=10, level=None, component=None):
+        # Fetches backend logs for the System Console
+        query = "SELECT timestamp, level, component, message FROM system_logs WHERE 1=1"
+        params = []
+        if level:
+            query += " AND level = %s"
+            params.append(level)
+        if component:
+            query += " AND component = %s"
+            params.append(component)
+            
+        query += " ORDER BY timestamp DESC LIMIT %s"
+        params.append(limit)
+        
+        return self._fetch(query, tuple(params))
+    def get_last_processed_pcap(self): return None
+    def get_pcap_files(self, limit=10, status=None): return []
+    def get_recent_unique_fingerprints(self, limit=10): return []
+    def get_all_whitelist_entries(self): return []
+    def get_candidates(self, limit=10): return []
+    def seed_sample_whitelist(self): pass
+
+# ---------------------------------
+# RESOURCE / STYLE
+# ---------------------------------
 st.set_page_config(
     page_title="AI-Driven TLS Fingerprinting Dashboard",
     page_icon="🔐",
     layout="wide"
 )
 
-
-# ---------------------------------
-# RESOURCE / STYLE
-# ---------------------------------
-
 @st.cache_resource
-def get_db() -> DatabaseManager:
-    return DatabaseManager()
-
+def get_db():
+    # This answers your question! We return the UI Adapter here instead of UIDatabaseAdapter
+    return UIDatabaseAdapter()
 
 def load_css() -> None:
     # Inject Remix Icons (cyberpunk-friendly icon set)
@@ -40,12 +151,16 @@ def load_css() -> None:
         css = css_path.read_text(encoding="utf-8")
         st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
 
+# ---------------------------------
+# TSHARK / SETTINGS HELPERS
+# ---------------------------------
+
 
 # ---------------------------------
 # TSHARK / SETTINGS HELPERS
 # ---------------------------------
 
-def resolve_tshark_path(db: DatabaseManager) -> str:
+def resolve_tshark_path(db: UIDatabaseAdapter) -> str:
     return (
         db.get_config("tshark_path")
         or os.environ.get("TSHARK_PATH")
@@ -54,63 +169,19 @@ def resolve_tshark_path(db: DatabaseManager) -> str:
     )
 
 
-def get_detected_interfaces(db: DatabaseManager) -> List[dict]:
-    """
-    Öncelik:
-    1. Host capture agent tarafından paylaşılan JSON dosyası
-    2. Native / non-docker kullanımda local tshark -D fallback
-    """
-    runtime_file = Path("data/runtime/detected_interfaces.json")
-
-    if runtime_file.exists():
+def get_detected_interfaces(db: UIDatabaseAdapter) -> List[dict]:
+    import json
+    # Ajanın veritabanına yazdığı JSON listesini çekiyoruz!
+    raw_data = db.get_config("available_interfaces", "")
+    if raw_data:
         try:
-            data = json.loads(runtime_file.read_text(encoding="utf-8"))
-            if isinstance(data, list):
-                return data
+            return json.loads(raw_data)
         except Exception:
-            pass
-
-    tshark_path = resolve_tshark_path(db)
-
-    try:
-        result = subprocess.run(
-            [tshark_path, "-D"],
-            capture_output=True,
-            text=True,
-            encoding="utf-8"
-        )
-    except FileNotFoundError:
-        return []
-    except Exception:
-        return []
-
-    if result.returncode != 0:
-        return []
-
-    interfaces = []
-    for raw_line in result.stdout.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-
-        parts = line.split(". ", 1)
-        if len(parts) == 2 and parts[0].isdigit():
-            interfaces.append({
-                "index": parts[0],
-                "label": parts[1],
-                "display": line
-            })
-        else:
-            interfaces.append({
-                "index": "",
-                "label": line,
-                "display": line
-            })
-
-    return interfaces
+            return []
+    return []
 
 
-def get_current_config(db: DatabaseManager) -> dict:
+def get_current_config(db: UIDatabaseAdapter) -> dict:
     return {
         "capture_interface": db.get_config("capture_interface", "") or "",
         "tshark_path": resolve_tshark_path(db),
@@ -240,7 +311,7 @@ def format_file_size(size: Optional[int]) -> str:
     return f"{size:.1f} TB"
 
 
-def render_capture_config_warning(db: DatabaseManager) -> None:
+def render_capture_config_warning(db: UIDatabaseAdapter) -> None:
     configured_interface = db.get_config("capture_interface", "") or ""
     if not configured_interface:
         st.warning(
@@ -384,7 +455,7 @@ def render_sidebar() -> dict:
 # PAGE: OVERVIEW
 # ---------------------------------
 
-def render_overview(db: DatabaseManager, table_limit: int) -> None:
+def render_overview(db: UIDatabaseAdapter, table_limit: int) -> None:
     render_capture_config_warning(db)
 
     metrics         = db.get_summary_metrics()
@@ -520,7 +591,7 @@ def render_overview(db: DatabaseManager, table_limit: int) -> None:
 # PAGE: LIVE MONITOR
 # ---------------------------------
 
-def render_live_monitor(db: DatabaseManager, table_limit: int) -> None:
+def render_live_monitor(db: UIDatabaseAdapter, table_limit: int) -> None:
     render_capture_config_warning(db)
 
     metrics              = db.get_summary_metrics()
@@ -611,7 +682,7 @@ def render_live_monitor(db: DatabaseManager, table_limit: int) -> None:
 # PAGE: PCAP EXPLORER
 # ---------------------------------
 
-def render_pcap_explorer(db: DatabaseManager, table_limit: int) -> None:
+def render_pcap_explorer(db: UIDatabaseAdapter, table_limit: int) -> None:
     section_header("PCAP Explorer", "Track lifecycle and processing outcome of captured or imported PCAP files.")
 
     status_filter = st.selectbox(
@@ -652,7 +723,7 @@ def render_pcap_explorer(db: DatabaseManager, table_limit: int) -> None:
 # PAGE: FINGERPRINT INTELLIGENCE
 # ---------------------------------
 
-def render_fingerprint_intelligence(db: DatabaseManager, table_limit: int) -> None:
+def render_fingerprint_intelligence(db: UIDatabaseAdapter, table_limit: int) -> None:
     section_header("Fingerprint Intelligence", "Explore unique TLS fingerprints, predictions and protocol behavior patterns.")
 
     top_ja3         = db.get_top_ja3_hashes(limit=15)
@@ -711,7 +782,7 @@ def render_fingerprint_intelligence(db: DatabaseManager, table_limit: int) -> No
 # PAGE: WHITELIST
 # ---------------------------------
 
-def render_whitelist(db: DatabaseManager, table_limit: int) -> None:
+def render_whitelist(db: UIDatabaseAdapter, table_limit: int) -> None:
     section_header("Whitelist Management", "Known JA3 signatures trusted or mapped by the platform.")
 
     whitelist = db.get_all_whitelist_entries()
@@ -738,7 +809,7 @@ def render_whitelist(db: DatabaseManager, table_limit: int) -> None:
 # PAGE: CANDIDATES
 # ---------------------------------
 
-def render_candidates(db: DatabaseManager, table_limit: int) -> None:
+def render_candidates(db: UIDatabaseAdapter, table_limit: int) -> None:
     section_header("Candidate Queue", "Unknown or inferred JA3 signatures awaiting stronger confidence or manual promotion.")
 
     candidates = db.get_candidates(limit=table_limit)
@@ -768,7 +839,7 @@ def render_candidates(db: DatabaseManager, table_limit: int) -> None:
 # PAGE: SYSTEM CONSOLE
 # ---------------------------------
 
-def render_system_console(db: DatabaseManager, table_limit: int) -> None:
+def render_system_console(db: UIDatabaseAdapter, table_limit: int) -> None:
     section_header("System Console", "Operational backend logs from dashboard, capture, watcher, extractor and predictor components.")
 
     col1, col2 = st.columns(2)
@@ -809,7 +880,7 @@ def render_system_console(db: DatabaseManager, table_limit: int) -> None:
 # PAGE: SETTINGS
 # ---------------------------------
 
-def render_settings(db: DatabaseManager) -> None:
+def render_settings(db: UIDatabaseAdapter) -> None:
     section_header("Settings & Capture Configuration", "Configure device-specific capture settings here. Saved values are stored in SQLite and reused on the next launch.")
 
     current             = get_current_config(db)
@@ -834,7 +905,7 @@ def render_settings(db: DatabaseManager) -> None:
             format_func=lambda x: interface_label_map.get(x, x)
         )
         detected_df = pd.DataFrame(detected_interfaces)
-        st.dataframe(detected_df[["index", "label"]], use_container_width=True, hide_index=True)
+        st.dataframe(detected_df[["index", "display"]], use_container_width=True, hide_index=True)
     else:
         st.warning(
             "TShark ile interface listesi alınamadı. TShark yolu yanlış olabilir ya da cihazda kurulu olmayabilir. "
@@ -906,23 +977,25 @@ def render_settings(db: DatabaseManager) -> None:
     }
 
     with col_save:
-        if st.button("Save Only", use_container_width=True, key="settings_save_only"):
+        if st.button("Save Config Only", use_container_width=True):
             db.set_many_config(config_payload)
-            st.success(f"Settings saved. Interface: {effective_interface or 'Not Set'}")
+            st.success("Ayarlar veritabanına kaydedildi.")
             st.rerun()
 
     with col_apply:
-        if st.button("Save & Apply", use_container_width=True, key="settings_save_apply"):
+        if st.button("▶ BAŞLAT (TShark)", type="primary", use_container_width=True):
             db.set_many_config(config_payload)
-            st.success(
-                "Settings saved. Host capture agent will detect the config change automatically within a few seconds."
-            )
-            st.rerun()
+            db.set_config("sniffing_command", "START") 
+            st.success("TShark Başlatma emri gönderildi...")
+            
+        if st.button("⏹ DURDUR", use_container_width=True):
+            db.set_config("sniffing_command", "STOP")
+            st.warning("Durdurma emri gönderildi.")
 
     with col_demo:
-        if st.button("Seed Demo Whitelist", use_container_width=True, key="settings_seed_demo"):
+        if st.button("Seed Demo Whitelist", use_container_width=True):
             db.seed_sample_whitelist()
-            st.success("Sample whitelist entries added.")
+            st.success("Örnek whitelist eklendi.")
 
     st.info(
         "Notes: Interface numbering changes from device to device. "
