@@ -202,31 +202,31 @@ CYBER_COLORS = ["#00ff41", "#00d4ff", "#ff00a0", "#ffe600", "#b400ff", "#ff6600"
 
 
 def cyber_layout(fig: go.Figure, **kwargs) -> go.Figure:
-    """Apply cyberpunk dark theme to all Plotly figures."""
+    """Apply cyberpunk dark theme to all Plotly figures with gridlines disabled for cleanliness."""
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(7,7,16,0.95)",
+        plot_bgcolor="rgba(2,18,6,0.95)",
         font=dict(
-            color="#3a7a4f",
+            color="#ffffff",
             family="'Share Tech Mono', monospace",
             size=11,
         ),
         margin=dict(l=10, r=10, t=28, b=10),
         xaxis=dict(
-            gridcolor="rgba(0,255,65,0.07)",
-            zerolinecolor="rgba(0,255,65,0.15)",
-            tickfont=dict(color="#2a5c4a", family="'Share Tech Mono', monospace"),
+            showgrid=False,
+            zeroline=False,
+            tickfont=dict(color="#ffffff", family="'Share Tech Mono', monospace"),
             linecolor="rgba(0,255,65,0.2)",
         ),
         yaxis=dict(
-            gridcolor="rgba(0,255,65,0.07)",
-            zerolinecolor="rgba(0,255,65,0.15)",
-            tickfont=dict(color="#2a5c4a", family="'Share Tech Mono', monospace"),
+            showgrid=False,
+            zeroline=False,
+            tickfont=dict(color="#ffffff", family="'Share Tech Mono', monospace"),
             linecolor="rgba(0,255,65,0.2)",
         ),
         legend=dict(
             bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#3a7a4f"),
+            font=dict(color="#ffffff"),
         ),
         **kwargs,
     )
@@ -254,9 +254,9 @@ def render_hero() -> None:
             </div>
             <div class="hero-chip-row">
                 <span class="hero-chip"><i class="ri-code-s-slash-line"></i> ClientHello Metadata</span>
-                <span class="hero-chip"><i class="ri-fingerprint-2-line"></i> JA3 Fingerprinting</span>
+                <span class="hero-chip hero-chip-cyan"><i class="ri-fingerprint-2-line"></i> JA3 Fingerprinting</span>
                 <span class="hero-chip"><i class="ri-database-2-line"></i> SQLite Whitelist</span>
-                <span class="hero-chip"><i class="ri-broadcast-line"></i> Live Capture Monitoring</span>
+                <span class="hero-chip hero-chip-cyan"><i class="ri-broadcast-line"></i> Live Capture Monitoring</span>
                 <span class="hero-chip"><i class="ri-terminal-box-line"></i> Operational Console</span>
             </div>
         </div>
@@ -265,10 +265,12 @@ def render_hero() -> None:
     )
 
 
-def render_metric_card(label: str, value: str, footnote: str = "") -> str:
+def render_metric_card(label: str, value: str, footnote: str = "", size: str = "", color: str = "green") -> str:
+    size_class = f" metric-card-{size}" if size else ""
+    color_class = f" metric-color-{color}" if color else ""
     footnote_html = f'<div class="metric-footnote">{footnote}</div>' if footnote else ""
     return f"""
-    <div class="metric-card">
+    <div class="metric-card{size_class}{color_class}">
         <div class="metric-label">{label}</div>
         <div class="metric-value">{value}</div>
         {footnote_html}
@@ -315,8 +317,8 @@ def render_capture_config_warning(db: UIDatabaseAdapter) -> None:
     configured_interface = db.get_config("capture_interface", "") or ""
     if not configured_interface:
         st.warning(
-            "⚠ Capture interface configured değil. Live capture başlatmak için "
-            "Settings sayfasından bir interface seçip kaydet."
+            "⚠ Capture interface is not configured. Go to the Settings page to select "
+            "and save an interface to enable live network capture."
         )
 
 
@@ -361,19 +363,19 @@ def section_header(title: str, note: str = "") -> None:
 # SIDEBAR
 # ---------------------------------
 
-# Icon + label mapping for sidebar navigation radio
+# Sidebar navigation mapping (clean professional list without emojis)
 _NAV_ITEMS = [
-    ("📊", "Overview"),
-    ("📡", "Live Monitor"),
-    ("🗂", "PCAP Explorer"),
-    ("🔬", "Fingerprint Intelligence"),
-    ("🛡", "Whitelist"),
-    ("🎯", "Candidates"),
-    ("💻", "System Console"),
-    ("⚙", "Settings"),
+    "Overview",
+    "Live Monitor",
+    "PCAP Explorer",
+    "Fingerprint Intelligence",
+    "Whitelist",
+    "Candidates",
+    "System Console",
+    "Settings",
 ]
-_NAV_LABELS  = [f"{icon}  {label}" for icon, label in _NAV_ITEMS]
-_LABEL_TO_PAGE = {f"{icon}  {label}": label for icon, label in _NAV_ITEMS}
+_NAV_LABELS  = _NAV_ITEMS
+_LABEL_TO_PAGE = {label: label for label in _NAV_ITEMS}
 
 
 def render_sidebar() -> dict:
@@ -435,10 +437,10 @@ def render_sidebar() -> dict:
             <div class="nav-helper">
                 <div class="nav-helper-title"><i class="ri-terminal-box-line"></i>&nbsp; Operator Tips</div>
                 <div class="nav-helper-text">
-                    <b style="color:var(--neon-green)">📊 Overview</b> → system health<br>
-                    <b style="color:var(--neon-green)">📡 Live Monitor</b> → backend feed<br>
-                    <b style="color:var(--neon-green)">🗂 PCAP Explorer</b> → file lifecycle<br>
-                    <b style="color:var(--neon-green)">💻 System Console</b> → debug logs
+                    <b style="color:var(--neon-green)">Overview</b> → system health<br>
+                    <b style="color:var(--neon-green)">Live Monitor</b> → backend feed<br>
+                    <b style="color:var(--neon-green)">PCAP Explorer</b> → file lifecycle<br>
+                    <b style="color:var(--neon-green)">System Console</b> → debug logs
                 </div>
             </div>
             """,
@@ -472,26 +474,26 @@ def render_overview(db: UIDatabaseAdapter, table_limit: int) -> None:
     # ── Row 1 ──────────────────────────────────────────────────
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.markdown(render_metric_card("System Status", "Online", "Dashboard and database are reachable"), unsafe_allow_html=True)
+        st.markdown(render_metric_card("System Status", "Online", "Dashboard and database are reachable", size="lg", color="green"), unsafe_allow_html=True)
     with col2:
-        st.markdown(render_metric_card("Capture / Watcher", capture_state, f"Active jobs: {metrics.get('active_pcap_jobs', 0)}"), unsafe_allow_html=True)
+        st.markdown(render_metric_card("Capture / Watcher", capture_state, f"Active jobs: {metrics.get('active_pcap_jobs', 0)}", size="lg", color="cyan"), unsafe_allow_html=True)
     with col3:
-        st.markdown(render_metric_card("Total Events", str(metrics.get("total_events", 0)), f"Processed PCAPs: {metrics.get('processed_pcap_count', 0)}"), unsafe_allow_html=True)
+        st.markdown(render_metric_card("Total Events", str(metrics.get("total_events", 0)), f"Processed PCAPs: {metrics.get('processed_pcap_count', 0)}", size="lg", color="green"), unsafe_allow_html=True)
     with col4:
-        st.markdown(render_metric_card("Last Processed PCAP", last_pcap, "Most recently completed file"), unsafe_allow_html=True)
+        st.markdown(render_metric_card("Last Processed PCAP", last_pcap, "Most recently completed file", size="lg", color="cyan"), unsafe_allow_html=True)
 
     st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
     # ── Row 2 ──────────────────────────────────────────────────
     col5, col6, col7, col8 = st.columns(4)
     with col5:
-        st.markdown(render_metric_card("Known Events",      str(metrics.get("known_events", 0))),     unsafe_allow_html=True)
+        st.markdown(render_metric_card("Known Events",      str(metrics.get("known_events", 0)), color="green"),     unsafe_allow_html=True)
     with col6:
-        st.markdown(render_metric_card("Unknown Events",    str(metrics.get("unknown_events", 0))),   unsafe_allow_html=True)
+        st.markdown(render_metric_card("Unknown Events",    str(metrics.get("unknown_events", 0)), color="cyan"),   unsafe_allow_html=True)
     with col7:
-        st.markdown(render_metric_card("Candidates",        str(metrics.get("candidate_count", 0))),  unsafe_allow_html=True)
+        st.markdown(render_metric_card("Candidates",        str(metrics.get("candidate_count", 0)), color="green"),  unsafe_allow_html=True)
     with col8:
-        st.markdown(render_metric_card("Whitelist Entries", str(metrics.get("whitelist_count", 0))),  unsafe_allow_html=True)
+        st.markdown(render_metric_card("Whitelist Entries", str(metrics.get("whitelist_count", 0)), color="cyan"),  unsafe_allow_html=True)
 
     st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
 
@@ -539,7 +541,7 @@ def render_overview(db: UIDatabaseAdapter, table_limit: int) -> None:
             fig = px.pie(df, names="dst_port", values="hit_count",
                          color_discrete_sequence=CYBER_COLORS, hole=0.48)
             fig.update_traces(
-                textfont_color="#c8ffd4",
+                textfont_color="#ffffff",
                 marker=dict(line=dict(color="#070710", width=2)),
             )
             cyber_layout(fig)
@@ -908,8 +910,8 @@ def render_settings(db: UIDatabaseAdapter) -> None:
         st.dataframe(detected_df[["index", "display"]], use_container_width=True, hide_index=True)
     else:
         st.warning(
-            "TShark ile interface listesi alınamadı. TShark yolu yanlış olabilir ya da cihazda kurulu olmayabilir. "
-            "Yine de interface numarasını manuel girebilirsin."
+            "Failed to retrieve interface list via TShark. The TShark path may be incorrect, or it may not be installed. "
+            "You can still enter the interface manually below."
         )
         selected_interface = current_interface
 
@@ -917,7 +919,7 @@ def render_settings(db: UIDatabaseAdapter) -> None:
         "Manual Interface Override",
         value="",
         placeholder="Optional: enter interface manually only if needed",
-        help="Bu alan opsiyoneldir. Boş bırakırsan dropdown seçimi kaydedilir. Sadece özel durumda manuel interface adı/numarası gir."
+        help="This field is optional. If left blank, the dropdown selection will be saved. Only enter an interface name manually if it was not detected."
     )
 
     st.markdown("### Runtime Settings")
@@ -1010,6 +1012,78 @@ def render_settings(db: UIDatabaseAdapter) -> None:
 
 def main() -> None:
     load_css()
+    # ── Critical inline overrides (loads LAST, wins all specificity battles) ──
+    st.markdown("""
+    <style>
+    /* ═══ TOP-LEVEL CONTAINERS ═══ */
+    html, body, #root, .root,
+    [data-testid="stApp"], .stApp,
+    [data-testid="stAppViewContainer"] {
+        background-color: #0c0f16 !important;
+    }
+
+    /* ═══ MAIN CONTENT AREA: force #0c0f16 on main page only ═══ */
+    [data-testid="stMain"], section.main, .main,
+    [data-testid="stMain"] .block-container,
+    [data-testid="stMain"] [data-testid="stMainBlockContainer"],
+    [data-testid="stMain"] div[data-testid="stVerticalBlock"],
+    [data-testid="stMain"] div[data-testid="stHorizontalBlock"],
+    [data-testid="stMain"] div[data-testid="stColumn"],
+    [data-testid="stMain"] div[data-testid="stColumn"] > div,
+    [data-testid="stMain"] div[data-testid="stColumn"] > div > div,
+    [data-testid="stMain"] div[data-testid="stElementContainer"],
+    [data-testid="stMain"] div[data-testid="stElementContainer"] > div {
+        background-color: #0c0f16 !important;
+    }
+
+    /* ═══ SIDEBAR AREA: force #090c12 background ═══ */
+    [data-testid="stSidebar"],
+    [data-testid="stSidebarContent"],
+    section[data-testid="stSidebar"] {
+        background-color: #090c12 !important;
+    }
+
+    /* Make all layout wrappers inside the sidebar transparent so they show the sidebar bg */
+    section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"],
+    section[data-testid="stSidebar"] div[data-testid="stElementContainer"],
+    section[data-testid="stSidebar"] div[data-testid="stElementContainer"] > div,
+    section[data-testid="stSidebar"] div[data-testid="stHorizontalBlock"] {
+        background-color: transparent !important;
+    }
+
+    /* ═══ RADIO BUTTONS IN SIDEBAR ═══ */
+    section[data-testid="stSidebar"] [data-baseweb="radio"],
+    section[data-testid="stSidebar"] [data-baseweb="radio"] > div,
+    section[data-testid="stSidebar"] [data-baseweb="radio"] label,
+    section[data-testid="stSidebar"] [data-baseweb="radio"] label > div {
+        background-color: transparent !important;
+    }
+
+    /* The custom radio circle – transparent bg with gold border */
+    section[data-testid="stSidebar"] [data-baseweb="radio"] label > div:first-child > div {
+        background-color: transparent !important;
+        border: 2px solid #ff9f00 !important;
+        border-radius: 50% !important;
+        width: 18px !important;
+        height: 18px !important;
+        min-width: 18px !important;
+        min-height: 18px !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Selected radio – filled gold with glow */
+    section[data-testid="stSidebar"] [data-baseweb="radio"] [aria-checked="true"] > div:first-child > div {
+        background-color: #ff9f00 !important;
+        box-shadow: 0 0 8px rgba(255, 159, 0, 0.6) !important;
+    }
+
+    /* ═══ CARDS & PANELS: force #141923 background ═══ */
+    .app-hero, .metric-card, .section-card, .info-panel,
+    .log-console, .status-item {
+        background-color: #141923 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     db = get_db()
 
     render_hero()
