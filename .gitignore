@@ -1,17 +1,28 @@
-data/raw_pcaps/*.pcap
-data/raw_pcaps/*.cap
-data/logs/*.log
-data/processed_csvs/*.csv
-
-
+# Python
 __pycache__/
 *.pyc
-.ipynb_checkpoints
+venv/
+.env
 
+# Data
+data/*.pcap
+data/*.pcapng
+data/fingerprints.db
+*.log
 
+# Models (büyük dosyalar - elle paylaşılacak)
+saved_models/*.safetensors
+saved_models/*.bin
+saved_models/pytorch_model.bin
+
+# IDE
+.vscode/
+.idea/
+
+# OS
 .DS_Store
 Thumbs.db
 
-
-.vscode/
-.idea/
+# Outputs
+results/
+app.log

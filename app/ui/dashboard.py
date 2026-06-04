@@ -6,28 +6,139 @@ from pathlib import Path
 from typing import List, Optional
 
 import pandas as pd
+import psycopg2
+from psycopg2.extras import RealDictCursor
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from app.utils.db_handler import DatabaseManager
+# =====================================================================
+# CUSTOM UI DATABASE ADAPTER (Reads directly from Postgres, touches no backend code)
+# =====================================================================
+class UIDatabaseAdapter:
+    def __init__(self):
+        # Connect directly to the Postgres container setup in docker-compose
+        self.conn_str = f"host={os.getenv('DB_HOST', 'db')} dbname={os.getenv('DB_NAME', 'tls_db')} user={os.getenv('DB_USER', 'user')} password={os.getenv('DB_PASS', 'pass')} port=5432"
 
+    def _fetch(self, query, params=None):
+        try:
+            with psycopg2.connect(self.conn_str) as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(query, params)
+                    return [dict(row) for row in cur.fetchall()]
+        except Exception as e:
+            return []
 
+    # --- REAL DATA FROM YOUR BACKEND (tls_events table) ---
+    def get_summary_metrics(self):
+        total = self._fetch("SELECT COUNT(*) as c FROM tls_events")
+        known = self._fetch("SELECT COUNT(*) as c FROM tls_events WHERE prediction != 'Unknown Traffic'")
+        t_val = total[0]['c'] if total else 0
+        k_val = known[0]['c'] if known else 0
+        return {
+            "total_events": t_val,
+            "known_events": k_val,
+            "unknown_events": t_val - k_val,
+            "active_pcap_jobs": 0, "processed_pcap_count": 0, "candidate_count": 0, "whitelist_count": 0
+        }
+
+    def get_recent_events(self, limit=50):
+        # Map your DB columns to what the UI expects
+        return self._fetch("SELECT timestamp, src_ip, dst_ip, ja3_hash, prediction, threat_level as status FROM tls_events ORDER BY timestamp DESC LIMIT %s", (limit,))
+
+    def get_top_predictions(self, limit=10):
+        return self._fetch("SELECT prediction, COUNT(*) as hit_count FROM tls_events GROUP BY prediction ORDER BY hit_count DESC LIMIT %s", (limit,))
+
+    def get_top_ja3_hashes(self, limit=10):
+        return self._fetch("SELECT ja3_hash, COUNT(*) as hit_count, MAX(prediction) as latest_prediction, MAX(timestamp) as last_seen FROM tls_events GROUP BY ja3_hash ORDER BY hit_count DESC LIMIT %s", (limit,))
+
+    def get_event_trend(self, limit=24):
+        # PostgreSQL syntax to group by hour
+        query = """
+        SELECT date_trunc('hour', timestamp) as hour_bucket, COUNT(*) as event_count 
+        FROM tls_events 
+        GROUP BY hour_bucket 
+        ORDER BY hour_bucket DESC LIMIT %s
+        """
+        return self._fetch(query, (limit,))
+
+    # --- SAFE STUBS FOR UI FEATURES YOU HAVEN'T BUILT YET ---
+    # --- GERÇEK VERİTABANI YAZMA İŞLEMLERİ ---
+    def _execute(self, query, params=None):
+        """Veritabanına veri yazmak için yardımcı fonksiyon"""
+        try:
+            with psycopg2.connect(self.conn_str) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(query, params)
+                    conn.commit()
+        except Exception as e:
+            print(f"DB Execute Error: {e}")
+
+    def set_config(self, key, value):
+        # Tablo yoksa çökmemesi için garantiye alıyoruz
+        self._execute("CREATE TABLE IF NOT EXISTS system_config (key VARCHAR(50) PRIMARY KEY, value TEXT);")
+        
+        query = """
+        INSERT INTO system_config (key, value) VALUES (%s, %s)
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+        """
+        self._execute(query, (key, value))
+
+    def get_config(self, key, default=""):
+        res = self._fetch("SELECT value FROM system_config WHERE key = %s", (key,))
+        if res and len(res) > 0:
+            return res[0]['value']
+        return default
+
+    def set_many_config(self, d):
+        for k, v in d.items():
+            self.set_config(k, v)
+    def get_port_distribution(self, limit=10):
+        # Groups traffic by destination port for the Pie Chart
+        return self._fetch("""
+            SELECT dst_port, COUNT(*) as hit_count 
+            FROM tls_events 
+            WHERE dst_port IS NOT NULL 
+            GROUP BY dst_port 
+            ORDER BY hit_count DESC 
+            LIMIT %s
+        """, (limit,))
+
+    def get_recent_logs(self, limit=10, level=None, component=None):
+        # Fetches backend logs for the System Console
+        query = "SELECT timestamp, level, component, message FROM system_logs WHERE 1=1"
+        params = []
+        if level:
+            query += " AND level = %s"
+            params.append(level)
+        if component:
+            query += " AND component = %s"
+            params.append(component)
+            
+        query += " ORDER BY timestamp DESC LIMIT %s"
+        params.append(limit)
+        
+        return self._fetch(query, tuple(params))
+    def get_last_processed_pcap(self): return None
+    def get_pcap_files(self, limit=10, status=None): return []
+    def get_recent_unique_fingerprints(self, limit=10): return []
+    def get_all_whitelist_entries(self): return []
+    def get_candidates(self, limit=10): return []
+    def seed_sample_whitelist(self): pass
+
+# ---------------------------------
+# RESOURCE / STYLE
+# ---------------------------------
 st.set_page_config(
     page_title="AI-Driven TLS Fingerprinting Dashboard",
     page_icon="🔐",
     layout="wide"
 )
 
-
-# ---------------------------------
-# RESOURCE / STYLE
-# ---------------------------------
-
 @st.cache_resource
-def get_db() -> DatabaseManager:
-    return DatabaseManager()
-
+def get_db():
+    # This answers your question! We return the UI Adapter here instead of UIDatabaseAdapter
+    return UIDatabaseAdapter()
 
 def load_css() -> None:
     # Inject Remix Icons (cyberpunk-friendly icon set)
@@ -40,12 +151,16 @@ def load_css() -> None:
         css = css_path.read_text(encoding="utf-8")
         st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
 
+# ---------------------------------
+# TSHARK / SETTINGS HELPERS
+# ---------------------------------
+
 
 # ---------------------------------
 # TSHARK / SETTINGS HELPERS
 # ---------------------------------
 
-def resolve_tshark_path(db: DatabaseManager) -> str:
+def resolve_tshark_path(db: UIDatabaseAdapter) -> str:
     return (
         db.get_config("tshark_path")
         or os.environ.get("TSHARK_PATH")
@@ -54,63 +169,19 @@ def resolve_tshark_path(db: DatabaseManager) -> str:
     )
 
 
-def get_detected_interfaces(db: DatabaseManager) -> List[dict]:
-    """
-    Öncelik:
-    1. Host capture agent tarafından paylaşılan JSON dosyası
-    2. Native / non-docker kullanımda local tshark -D fallback
-    """
-    runtime_file = Path("data/runtime/detected_interfaces.json")
-
-    if runtime_file.exists():
+def get_detected_interfaces(db: UIDatabaseAdapter) -> List[dict]:
+    import json
+    # Ajanın veritabanına yazdığı JSON listesini çekiyoruz!
+    raw_data = db.get_config("available_interfaces", "")
+    if raw_data:
         try:
-            data = json.loads(runtime_file.read_text(encoding="utf-8"))
-            if isinstance(data, list):
-                return data
+            return json.loads(raw_data)
         except Exception:
-            pass
-
-    tshark_path = resolve_tshark_path(db)
-
-    try:
-        result = subprocess.run(
-            [tshark_path, "-D"],
-            capture_output=True,
-            text=True,
-            encoding="utf-8"
-        )
-    except FileNotFoundError:
-        return []
-    except Exception:
-        return []
-
-    if result.returncode != 0:
-        return []
-
-    interfaces = []
-    for raw_line in result.stdout.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-
-        parts = line.split(". ", 1)
-        if len(parts) == 2 and parts[0].isdigit():
-            interfaces.append({
-                "index": parts[0],
-                "label": parts[1],
-                "display": line
-            })
-        else:
-            interfaces.append({
-                "index": "",
-                "label": line,
-                "display": line
-            })
-
-    return interfaces
+            return []
+    return []
 
 
-def get_current_config(db: DatabaseManager) -> dict:
+def get_current_config(db: UIDatabaseAdapter) -> dict:
     return {
         "capture_interface": db.get_config("capture_interface", "") or "",
         "tshark_path": resolve_tshark_path(db),
@@ -131,31 +202,31 @@ CYBER_COLORS = ["#00ff41", "#00d4ff", "#ff00a0", "#ffe600", "#b400ff", "#ff6600"
 
 
 def cyber_layout(fig: go.Figure, **kwargs) -> go.Figure:
-    """Apply cyberpunk dark theme to all Plotly figures."""
+    """Apply cyberpunk dark theme to all Plotly figures with gridlines disabled for cleanliness."""
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(7,7,16,0.95)",
+        plot_bgcolor="rgba(2,18,6,0.95)",
         font=dict(
-            color="#3a7a4f",
+            color="#ffffff",
             family="'Share Tech Mono', monospace",
             size=11,
         ),
         margin=dict(l=10, r=10, t=28, b=10),
         xaxis=dict(
-            gridcolor="rgba(0,255,65,0.07)",
-            zerolinecolor="rgba(0,255,65,0.15)",
-            tickfont=dict(color="#2a5c4a", family="'Share Tech Mono', monospace"),
+            showgrid=False,
+            zeroline=False,
+            tickfont=dict(color="#ffffff", family="'Share Tech Mono', monospace"),
             linecolor="rgba(0,255,65,0.2)",
         ),
         yaxis=dict(
-            gridcolor="rgba(0,255,65,0.07)",
-            zerolinecolor="rgba(0,255,65,0.15)",
-            tickfont=dict(color="#2a5c4a", family="'Share Tech Mono', monospace"),
+            showgrid=False,
+            zeroline=False,
+            tickfont=dict(color="#ffffff", family="'Share Tech Mono', monospace"),
             linecolor="rgba(0,255,65,0.2)",
         ),
         legend=dict(
             bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#3a7a4f"),
+            font=dict(color="#ffffff"),
         ),
         **kwargs,
     )
@@ -183,9 +254,9 @@ def render_hero() -> None:
             </div>
             <div class="hero-chip-row">
                 <span class="hero-chip"><i class="ri-code-s-slash-line"></i> ClientHello Metadata</span>
-                <span class="hero-chip"><i class="ri-fingerprint-2-line"></i> JA3 Fingerprinting</span>
+                <span class="hero-chip hero-chip-cyan"><i class="ri-fingerprint-2-line"></i> JA3 Fingerprinting</span>
                 <span class="hero-chip"><i class="ri-database-2-line"></i> SQLite Whitelist</span>
-                <span class="hero-chip"><i class="ri-broadcast-line"></i> Live Capture Monitoring</span>
+                <span class="hero-chip hero-chip-cyan"><i class="ri-broadcast-line"></i> Live Capture Monitoring</span>
                 <span class="hero-chip"><i class="ri-terminal-box-line"></i> Operational Console</span>
             </div>
         </div>
@@ -194,10 +265,12 @@ def render_hero() -> None:
     )
 
 
-def render_metric_card(label: str, value: str, footnote: str = "") -> str:
+def render_metric_card(label: str, value: str, footnote: str = "", size: str = "", color: str = "green") -> str:
+    size_class = f" metric-card-{size}" if size else ""
+    color_class = f" metric-color-{color}" if color else ""
     footnote_html = f'<div class="metric-footnote">{footnote}</div>' if footnote else ""
     return f"""
-    <div class="metric-card">
+    <div class="metric-card{size_class}{color_class}">
         <div class="metric-label">{label}</div>
         <div class="metric-value">{value}</div>
         {footnote_html}
@@ -240,12 +313,12 @@ def format_file_size(size: Optional[int]) -> str:
     return f"{size:.1f} TB"
 
 
-def render_capture_config_warning(db: DatabaseManager) -> None:
+def render_capture_config_warning(db: UIDatabaseAdapter) -> None:
     configured_interface = db.get_config("capture_interface", "") or ""
     if not configured_interface:
         st.warning(
-            "⚠ Capture interface configured değil. Live capture başlatmak için "
-            "Settings sayfasından bir interface seçip kaydet."
+            "⚠ Capture interface is not configured. Go to the Settings page to select "
+            "and save an interface to enable live network capture."
         )
 
 
@@ -290,19 +363,19 @@ def section_header(title: str, note: str = "") -> None:
 # SIDEBAR
 # ---------------------------------
 
-# Icon + label mapping for sidebar navigation radio
+# Sidebar navigation mapping (clean professional list without emojis)
 _NAV_ITEMS = [
-    ("📊", "Overview"),
-    ("📡", "Live Monitor"),
-    ("🗂", "PCAP Explorer"),
-    ("🔬", "Fingerprint Intelligence"),
-    ("🛡", "Whitelist"),
-    ("🎯", "Candidates"),
-    ("💻", "System Console"),
-    ("⚙", "Settings"),
+    "Overview",
+    "Live Monitor",
+    "PCAP Explorer",
+    "Fingerprint Intelligence",
+    "Whitelist",
+    "Candidates",
+    "System Console",
+    "Settings",
 ]
-_NAV_LABELS  = [f"{icon}  {label}" for icon, label in _NAV_ITEMS]
-_LABEL_TO_PAGE = {f"{icon}  {label}": label for icon, label in _NAV_ITEMS}
+_NAV_LABELS  = _NAV_ITEMS
+_LABEL_TO_PAGE = {label: label for label in _NAV_ITEMS}
 
 
 def render_sidebar() -> dict:
@@ -364,10 +437,10 @@ def render_sidebar() -> dict:
             <div class="nav-helper">
                 <div class="nav-helper-title"><i class="ri-terminal-box-line"></i>&nbsp; Operator Tips</div>
                 <div class="nav-helper-text">
-                    <b style="color:var(--neon-green)">📊 Overview</b> → system health<br>
-                    <b style="color:var(--neon-green)">📡 Live Monitor</b> → backend feed<br>
-                    <b style="color:var(--neon-green)">🗂 PCAP Explorer</b> → file lifecycle<br>
-                    <b style="color:var(--neon-green)">💻 System Console</b> → debug logs
+                    <b style="color:var(--neon-green)">Overview</b> → system health<br>
+                    <b style="color:var(--neon-green)">Live Monitor</b> → backend feed<br>
+                    <b style="color:var(--neon-green)">PCAP Explorer</b> → file lifecycle<br>
+                    <b style="color:var(--neon-green)">System Console</b> → debug logs
                 </div>
             </div>
             """,
@@ -384,7 +457,7 @@ def render_sidebar() -> dict:
 # PAGE: OVERVIEW
 # ---------------------------------
 
-def render_overview(db: DatabaseManager, table_limit: int) -> None:
+def render_overview(db: UIDatabaseAdapter, table_limit: int) -> None:
     render_capture_config_warning(db)
 
     metrics         = db.get_summary_metrics()
@@ -401,26 +474,26 @@ def render_overview(db: DatabaseManager, table_limit: int) -> None:
     # ── Row 1 ──────────────────────────────────────────────────
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.markdown(render_metric_card("System Status", "Online", "Dashboard and database are reachable"), unsafe_allow_html=True)
+        st.markdown(render_metric_card("System Status", "Online", "Dashboard and database are reachable", size="lg", color="green"), unsafe_allow_html=True)
     with col2:
-        st.markdown(render_metric_card("Capture / Watcher", capture_state, f"Active jobs: {metrics.get('active_pcap_jobs', 0)}"), unsafe_allow_html=True)
+        st.markdown(render_metric_card("Capture / Watcher", capture_state, f"Active jobs: {metrics.get('active_pcap_jobs', 0)}", size="lg", color="cyan"), unsafe_allow_html=True)
     with col3:
-        st.markdown(render_metric_card("Total Events", str(metrics.get("total_events", 0)), f"Processed PCAPs: {metrics.get('processed_pcap_count', 0)}"), unsafe_allow_html=True)
+        st.markdown(render_metric_card("Total Events", str(metrics.get("total_events", 0)), f"Processed PCAPs: {metrics.get('processed_pcap_count', 0)}", size="lg", color="green"), unsafe_allow_html=True)
     with col4:
-        st.markdown(render_metric_card("Last Processed PCAP", last_pcap, "Most recently completed file"), unsafe_allow_html=True)
+        st.markdown(render_metric_card("Last Processed PCAP", last_pcap, "Most recently completed file", size="lg", color="cyan"), unsafe_allow_html=True)
 
     st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
     # ── Row 2 ──────────────────────────────────────────────────
     col5, col6, col7, col8 = st.columns(4)
     with col5:
-        st.markdown(render_metric_card("Known Events",      str(metrics.get("known_events", 0))),     unsafe_allow_html=True)
+        st.markdown(render_metric_card("Known Events",      str(metrics.get("known_events", 0)), color="green"),     unsafe_allow_html=True)
     with col6:
-        st.markdown(render_metric_card("Unknown Events",    str(metrics.get("unknown_events", 0))),   unsafe_allow_html=True)
+        st.markdown(render_metric_card("Unknown Events",    str(metrics.get("unknown_events", 0)), color="cyan"),   unsafe_allow_html=True)
     with col7:
-        st.markdown(render_metric_card("Candidates",        str(metrics.get("candidate_count", 0))),  unsafe_allow_html=True)
+        st.markdown(render_metric_card("Candidates",        str(metrics.get("candidate_count", 0)), color="green"),  unsafe_allow_html=True)
     with col8:
-        st.markdown(render_metric_card("Whitelist Entries", str(metrics.get("whitelist_count", 0))),  unsafe_allow_html=True)
+        st.markdown(render_metric_card("Whitelist Entries", str(metrics.get("whitelist_count", 0)), color="cyan"),  unsafe_allow_html=True)
 
     st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
 
@@ -468,7 +541,7 @@ def render_overview(db: DatabaseManager, table_limit: int) -> None:
             fig = px.pie(df, names="dst_port", values="hit_count",
                          color_discrete_sequence=CYBER_COLORS, hole=0.48)
             fig.update_traces(
-                textfont_color="#c8ffd4",
+                textfont_color="#ffffff",
                 marker=dict(line=dict(color="#070710", width=2)),
             )
             cyber_layout(fig)
@@ -520,7 +593,7 @@ def render_overview(db: DatabaseManager, table_limit: int) -> None:
 # PAGE: LIVE MONITOR
 # ---------------------------------
 
-def render_live_monitor(db: DatabaseManager, table_limit: int) -> None:
+def render_live_monitor(db: UIDatabaseAdapter, table_limit: int) -> None:
     render_capture_config_warning(db)
 
     metrics              = db.get_summary_metrics()
@@ -611,7 +684,7 @@ def render_live_monitor(db: DatabaseManager, table_limit: int) -> None:
 # PAGE: PCAP EXPLORER
 # ---------------------------------
 
-def render_pcap_explorer(db: DatabaseManager, table_limit: int) -> None:
+def render_pcap_explorer(db: UIDatabaseAdapter, table_limit: int) -> None:
     section_header("PCAP Explorer", "Track lifecycle and processing outcome of captured or imported PCAP files.")
 
     status_filter = st.selectbox(
@@ -652,7 +725,7 @@ def render_pcap_explorer(db: DatabaseManager, table_limit: int) -> None:
 # PAGE: FINGERPRINT INTELLIGENCE
 # ---------------------------------
 
-def render_fingerprint_intelligence(db: DatabaseManager, table_limit: int) -> None:
+def render_fingerprint_intelligence(db: UIDatabaseAdapter, table_limit: int) -> None:
     section_header("Fingerprint Intelligence", "Explore unique TLS fingerprints, predictions and protocol behavior patterns.")
 
     top_ja3         = db.get_top_ja3_hashes(limit=15)
@@ -711,7 +784,7 @@ def render_fingerprint_intelligence(db: DatabaseManager, table_limit: int) -> No
 # PAGE: WHITELIST
 # ---------------------------------
 
-def render_whitelist(db: DatabaseManager, table_limit: int) -> None:
+def render_whitelist(db: UIDatabaseAdapter, table_limit: int) -> None:
     section_header("Whitelist Management", "Known JA3 signatures trusted or mapped by the platform.")
 
     whitelist = db.get_all_whitelist_entries()
@@ -738,7 +811,7 @@ def render_whitelist(db: DatabaseManager, table_limit: int) -> None:
 # PAGE: CANDIDATES
 # ---------------------------------
 
-def render_candidates(db: DatabaseManager, table_limit: int) -> None:
+def render_candidates(db: UIDatabaseAdapter, table_limit: int) -> None:
     section_header("Candidate Queue", "Unknown or inferred JA3 signatures awaiting stronger confidence or manual promotion.")
 
     candidates = db.get_candidates(limit=table_limit)
@@ -768,7 +841,7 @@ def render_candidates(db: DatabaseManager, table_limit: int) -> None:
 # PAGE: SYSTEM CONSOLE
 # ---------------------------------
 
-def render_system_console(db: DatabaseManager, table_limit: int) -> None:
+def render_system_console(db: UIDatabaseAdapter, table_limit: int) -> None:
     section_header("System Console", "Operational backend logs from dashboard, capture, watcher, extractor and predictor components.")
 
     col1, col2 = st.columns(2)
@@ -809,7 +882,7 @@ def render_system_console(db: DatabaseManager, table_limit: int) -> None:
 # PAGE: SETTINGS
 # ---------------------------------
 
-def render_settings(db: DatabaseManager) -> None:
+def render_settings(db: UIDatabaseAdapter) -> None:
     section_header("Settings & Capture Configuration", "Configure device-specific capture settings here. Saved values are stored in SQLite and reused on the next launch.")
 
     current             = get_current_config(db)
@@ -834,11 +907,11 @@ def render_settings(db: DatabaseManager) -> None:
             format_func=lambda x: interface_label_map.get(x, x)
         )
         detected_df = pd.DataFrame(detected_interfaces)
-        st.dataframe(detected_df[["index", "label"]], use_container_width=True, hide_index=True)
+        st.dataframe(detected_df[["index", "display"]], use_container_width=True, hide_index=True)
     else:
         st.warning(
-            "TShark ile interface listesi alınamadı. TShark yolu yanlış olabilir ya da cihazda kurulu olmayabilir. "
-            "Yine de interface numarasını manuel girebilirsin."
+            "Failed to retrieve interface list via TShark. The TShark path may be incorrect, or it may not be installed. "
+            "You can still enter the interface manually below."
         )
         selected_interface = current_interface
 
@@ -846,7 +919,7 @@ def render_settings(db: DatabaseManager) -> None:
         "Manual Interface Override",
         value="",
         placeholder="Optional: enter interface manually only if needed",
-        help="Bu alan opsiyoneldir. Boş bırakırsan dropdown seçimi kaydedilir. Sadece özel durumda manuel interface adı/numarası gir."
+        help="This field is optional. If left blank, the dropdown selection will be saved. Only enter an interface name manually if it was not detected."
     )
 
     st.markdown("### Runtime Settings")
@@ -906,23 +979,25 @@ def render_settings(db: DatabaseManager) -> None:
     }
 
     with col_save:
-        if st.button("Save Only", use_container_width=True, key="settings_save_only"):
+        if st.button("Save Config Only", use_container_width=True):
             db.set_many_config(config_payload)
-            st.success(f"Settings saved. Interface: {effective_interface or 'Not Set'}")
+            st.success("Ayarlar veritabanına kaydedildi.")
             st.rerun()
 
     with col_apply:
-        if st.button("Save & Apply", use_container_width=True, key="settings_save_apply"):
+        if st.button("▶ BAŞLAT (TShark)", type="primary", use_container_width=True):
             db.set_many_config(config_payload)
-            st.success(
-                "Settings saved. Host capture agent will detect the config change automatically within a few seconds."
-            )
-            st.rerun()
+            db.set_config("sniffing_command", "START") 
+            st.success("TShark Başlatma emri gönderildi...")
+            
+        if st.button("⏹ DURDUR", use_container_width=True):
+            db.set_config("sniffing_command", "STOP")
+            st.warning("Durdurma emri gönderildi.")
 
     with col_demo:
-        if st.button("Seed Demo Whitelist", use_container_width=True, key="settings_seed_demo"):
+        if st.button("Seed Demo Whitelist", use_container_width=True):
             db.seed_sample_whitelist()
-            st.success("Sample whitelist entries added.")
+            st.success("Örnek whitelist eklendi.")
 
     st.info(
         "Notes: Interface numbering changes from device to device. "
@@ -937,6 +1012,78 @@ def render_settings(db: DatabaseManager) -> None:
 
 def main() -> None:
     load_css()
+    # ── Critical inline overrides (loads LAST, wins all specificity battles) ──
+    st.markdown("""
+    <style>
+    /* ═══ TOP-LEVEL CONTAINERS ═══ */
+    html, body, #root, .root,
+    [data-testid="stApp"], .stApp,
+    [data-testid="stAppViewContainer"] {
+        background-color: #0c0f16 !important;
+    }
+
+    /* ═══ MAIN CONTENT AREA: force #0c0f16 on main page only ═══ */
+    [data-testid="stMain"], section.main, .main,
+    [data-testid="stMain"] .block-container,
+    [data-testid="stMain"] [data-testid="stMainBlockContainer"],
+    [data-testid="stMain"] div[data-testid="stVerticalBlock"],
+    [data-testid="stMain"] div[data-testid="stHorizontalBlock"],
+    [data-testid="stMain"] div[data-testid="stColumn"],
+    [data-testid="stMain"] div[data-testid="stColumn"] > div,
+    [data-testid="stMain"] div[data-testid="stColumn"] > div > div,
+    [data-testid="stMain"] div[data-testid="stElementContainer"],
+    [data-testid="stMain"] div[data-testid="stElementContainer"] > div {
+        background-color: #0c0f16 !important;
+    }
+
+    /* ═══ SIDEBAR AREA: force #090c12 background ═══ */
+    [data-testid="stSidebar"],
+    [data-testid="stSidebarContent"],
+    section[data-testid="stSidebar"] {
+        background-color: #090c12 !important;
+    }
+
+    /* Make all layout wrappers inside the sidebar transparent so they show the sidebar bg */
+    section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"],
+    section[data-testid="stSidebar"] div[data-testid="stElementContainer"],
+    section[data-testid="stSidebar"] div[data-testid="stElementContainer"] > div,
+    section[data-testid="stSidebar"] div[data-testid="stHorizontalBlock"] {
+        background-color: transparent !important;
+    }
+
+    /* ═══ RADIO BUTTONS IN SIDEBAR ═══ */
+    section[data-testid="stSidebar"] [data-baseweb="radio"],
+    section[data-testid="stSidebar"] [data-baseweb="radio"] > div,
+    section[data-testid="stSidebar"] [data-baseweb="radio"] label,
+    section[data-testid="stSidebar"] [data-baseweb="radio"] label > div {
+        background-color: transparent !important;
+    }
+
+    /* The custom radio circle – transparent bg with gold border */
+    section[data-testid="stSidebar"] [data-baseweb="radio"] label > div:first-child > div {
+        background-color: transparent !important;
+        border: 2px solid #ff9f00 !important;
+        border-radius: 50% !important;
+        width: 18px !important;
+        height: 18px !important;
+        min-width: 18px !important;
+        min-height: 18px !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Selected radio – filled gold with glow */
+    section[data-testid="stSidebar"] [data-baseweb="radio"] [aria-checked="true"] > div:first-child > div {
+        background-color: #ff9f00 !important;
+        box-shadow: 0 0 8px rgba(255, 159, 0, 0.6) !important;
+    }
+
+    /* ═══ CARDS & PANELS: force #141923 background ═══ */
+    .app-hero, .metric-card, .section-card, .info-panel,
+    .log-console, .status-item {
+        background-color: #141923 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     db = get_db()
 
     render_hero()
