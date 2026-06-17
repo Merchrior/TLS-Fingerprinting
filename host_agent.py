@@ -5,7 +5,7 @@ import os
 import json # <-- YENİ EKLENDİ
 
 DB_HOST = "localhost"
-DB_PORT = 30543
+DB_PORT = 30545
 DB_NAME = "tls_db"
 DB_USER = "user"
 DB_PASS = "pass"
@@ -57,9 +57,10 @@ def run_agent():
                         interfaces_updated = True
                     # ------------------------------------------------
 
-                    cmd = get_config(cur, "sniffing_command")
+                    cmd_new = get_config(cur, "win_sniff_cmd")
+                    cmd_old = get_config(cur, "sniffing_command")
                     
-                    if cmd == "START" and tshark_process is None:
+                    if (cmd_new == "START" or cmd_old == "START") and tshark_process is None:
                         print("🔴 START komutu alındı! TShark başlatılıyor...")
                         tshark_path = get_config(cur, "tshark_path") or r"C:\Program Files\Wireshark\tshark.exe"
                         interface = get_config(cur, "capture_interface")
@@ -80,14 +81,14 @@ def run_agent():
                         
                         print(f"Çalıştırılan komut: {' '.join(command)}")
                         tshark_process = subprocess.Popen(command)
-                        cur.execute("UPDATE system_config SET value = 'IDLE' WHERE key = 'sniffing_command'")
+                        cur.execute("UPDATE system_config SET value = 'IDLE' WHERE key IN ('win_sniff_cmd', 'sniffing_command')")
                         conn.commit()
                         
-                    elif cmd == "STOP" and tshark_process is not None:
+                    elif (cmd_new == "STOP" or cmd_old == "STOP") and tshark_process is not None:
                         print("⏹ STOP komutu alındı! TShark durduruluyor...")
                         tshark_process.terminate()
                         tshark_process = None
-                        cur.execute("UPDATE system_config SET value = 'IDLE' WHERE key = 'sniffing_command'")
+                        cur.execute("UPDATE system_config SET value = 'IDLE' WHERE key IN ('win_sniff_cmd', 'sniffing_command')")
                         conn.commit()
                         
         except Exception as e:

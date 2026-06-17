@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Dict, List
 import logging
 import hashlib
+import re
 
 logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
 from scapy.all import rdpcap, IP, TCP
@@ -77,15 +78,36 @@ def process_pcap_file(pcap_file: str) -> List[Dict]:
                         ciphers.append(CIPHER_MAP.get(c, hex(c)))
                         
                 # 2. Extract and Clean Extensions
+                # 2. Extract and Clean Extensions
                 exts = []
+                sni_value = "Unknown"
+                
                 if hasattr(hello, 'ext'):
                     for ext in hello.ext:
-                        raw_name = str(ext.name)
+                        raw_name = str(getattr(ext, 'name', ''))
                         if "Scapy Unknown" in raw_name or "GREASE" in raw_name:
                             continue
                             
                         clean_name = raw_name.replace("TLS Extension - ", "").split(" (")[0].strip().lower().replace(" ", "_")
                         exts.append(clean_name)
+                        
+                        # 🚀 KESİN ÇÖZÜM: ID (0), boşluklu isim ve alt tireli ismi aynı anda kontrol et!
+                        if getattr(ext, 'type', -1) == 0 or "server name" in raw_name.lower() or "server_name" in clean_name:
+                            try:
+                                # Yöntem 1: Standart Scapy Objesinden Oku
+                                if hasattr(ext, 'servernames') and len(ext.servernames) > 0:
+                                    s_raw = ext.servernames[0].servername
+                                    sni_value = s_raw.decode('utf-8', errors='ignore') if isinstance(s_raw, bytes) else str(s_raw)
+                                    
+                                # Yöntem 2: (Fallback) Eğer obje eksikse, direkt baytların (hex) içinde Domain formatı ara
+                                if sni_value == "Unknown" or sni_value == "":
+                                    import re
+                                    raw_bytes = bytes(ext)
+                                    match = re.search(rb'([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', raw_bytes)
+                                    if match:
+                                        sni_value = match.group(1).decode('utf-8', errors='ignore')
+                            except Exception:
+                                pass
                             
                 discovered_pattern = ciphers + exts
                 ja3_raw = "-".join([str(c) for c in (getattr(hello, 'ciphers', []))])
@@ -99,7 +121,8 @@ def process_pcap_file(pcap_file: str) -> List[Dict]:
                     "ja3_hash": md5hex(ja3_raw),
                     "ja4_hash": generate_ja4(hello),
                     "discovered_pattern": discovered_pattern,
-                    "raw_metadata": json.dumps({"pattern": discovered_pattern})
+                    "raw_metadata": json.dumps({"pattern": discovered_pattern}),
+                    "sni": sni_value
                 })
     
                 

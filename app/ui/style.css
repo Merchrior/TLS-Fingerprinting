@@ -6,35 +6,39 @@
 
 /* ── DESIGN TOKENS ─────────────────────────────────────── */
 :root {
-  --bg-void:       #040408;
-  --bg-base:       #070710;
-  --bg-surface:    #0b0b1a;
-  --bg-elevated:   #0f0f22;
-  --bg-card:       rgba(11,11,26,0.88);
+  --bg-void:       #0c0f16;
+  --bg-base:       #090c12;
+  --bg-surface:    #141923;
+  --bg-elevated:   #1c2230;
+  --bg-card:       rgba(20, 25, 35, 0.92);
 
-  --neon-green:    #00ff41;
-  --neon-cyan:     #00d4ff;
-  --neon-magenta:  #ff00a0;
-  --neon-yellow:   #ffe600;
-  --neon-purple:   #b400ff;
+  --neon-green:    #ff9f00;
+  --neon-cyan:     #00e5ff;
+  --neon-magenta:  #ff3b9a;
+  --neon-yellow:   #ffd000;
+  --neon-purple:   #d53bff;
 
-  --green-dim:     rgba(0, 255, 65,   0.12);
-  --cyan-dim:      rgba(0, 212, 255,  0.11);
-  --magenta-dim:   rgba(255, 0, 160,  0.11);
-  --yellow-dim:    rgba(255, 230, 0,  0.10);
-  --purple-dim:    rgba(180, 0, 255,  0.11);
+  --green-dim:     rgba(255, 159, 0, 0.08);
+  --cyan-dim:      rgba(0, 229, 255, 0.08);
+  --magenta-dim:   rgba(255, 59, 154, 0.08);
+  --yellow-dim:    rgba(255, 208, 0, 0.08);
+  --purple-dim:    rgba(213, 59, 255, 0.08);
 
-  --text-terminal: #c8ffd4;
-  --text-dim:      #3a7a4f;
-  --text-muted:    #1e4d2e;
+  --text-terminal: #ffffff;
+  --text-dim:      #e2e8f0;
+  --text-muted:    #94a3b8;
 
-  --border-green:  rgba(0, 255, 65,  0.28);
-  --border-cyan:   rgba(0, 212, 255, 0.22);
+  --border-green:  rgba(255, 159, 0, 0.2);
+  --border-cyan:   rgba(0, 229, 255, 0.18);
+  --border-magenta: rgba(255, 59, 154, 0.18);
+  --border-yellow:  rgba(255, 208, 0, 0.18);
+  --border-purple:  rgba(213, 59, 255, 0.18);
+  --border-slate:  rgba(148, 163, 184, 0.12);
 
-  --glow-green:    0 0 8px rgba(0, 255, 65, 0.6),  0 0 20px rgba(0, 255, 65, 0.2);
-  --glow-cyan:     0 0 8px rgba(0, 212, 255, 0.6), 0 0 20px rgba(0, 212, 255, 0.2);
-  --glow-magenta:  0 0 8px rgba(255, 0, 160, 0.6), 0 0 20px rgba(255, 0, 160, 0.2);
-  --glow-yellow:   0 0 8px rgba(255, 230, 0, 0.6), 0 0 20px rgba(255, 230, 0, 0.2);
+  --glow-green:    0 0 8px rgba(255, 159, 0, 0.35), 0 0 20px rgba(255, 159, 0, 0.08);
+  --glow-cyan:     0 0 8px rgba(0, 229, 255, 0.35), 0 0 20px rgba(0, 229, 255, 0.08);
+  --glow-magenta:  0 0 8px rgba(255, 59, 154, 0.35), 0 0 20px rgba(255, 59, 154, 0.08);
+  --glow-yellow:   0 0 8px rgba(255, 208, 0, 0.35), 0 0 20px rgba(255, 208, 0, 0.08);
 
   --font-mono:    'Share Tech Mono', 'Courier New', monospace;
   --font-title:   'Orbitron', sans-serif;
@@ -44,30 +48,8 @@
   --radius-md:    8px;
 }
 
-/* ── SCANLINE OVERLAY (body pseudo) ───────────────────── */
-html::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    rgba(0, 0, 0, 0.15) 2px,
-    rgba(0, 0, 0, 0.15) 4px
-  );
-  pointer-events: none;
-  z-index: 9999;
-  animation: scanlines 8s linear infinite;
-}
-
-@keyframes scanlines {
-  0%   { background-position: 0 0; }
-  100% { background-position: 0 100%; }
-}
-
 /* ── GLOBAL BASE ──────────────────────────────────────── */
-html, body, [class*="css"] {
+html, body, .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"], section.main, [data-testid="stHeader"] {
   font-family: var(--font-body) !important;
   background-color: var(--bg-void) !important;
   color: var(--text-terminal) !important;
@@ -76,18 +58,13 @@ html, body, [class*="css"] {
 .main .block-container {
   background: var(--bg-void) !important;
   padding-top: 1.2rem !important;
-  /* subtle grid lines */
-  background-image:
-    linear-gradient(rgba(0,255,65,0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0,255,65,0.03) 1px, transparent 1px) !important;
-  background-size: 40px 40px !important;
 }
 
 /* ── SIDEBAR ──────────────────────────────────────────── */
 section[data-testid="stSidebar"] {
-  background: var(--bg-surface) !important;
+  background: var(--bg-base) !important;
   border-right: 1px solid var(--border-green) !important;
-  box-shadow: 4px 0 30px rgba(0, 255, 65, 0.08) !important;
+  box-shadow: 6px 0 60px rgba(255, 159, 0, 0.12), inset -30px 0 60px rgba(255, 159, 0, 0.09) !important;
 }
 
 section[data-testid="stSidebar"] > div {
@@ -102,6 +79,7 @@ section[data-testid="stSidebar"] > div {
   padding: 1rem 0.8rem 0.9rem;
   margin-bottom: 0.6rem;
   border-bottom: 1px solid var(--border-green);
+  background: transparent !important;
 }
 
 .nav-brand-icon {
@@ -121,9 +99,9 @@ section[data-testid="stSidebar"] > div {
 
 .nav-brand-title {
   font-family: var(--font-title);
-  font-size: 0.78rem;
+  font-size: 0.82rem;
   font-weight: 900;
-  color: var(--neon-green);
+  color: #ffffff;
   letter-spacing: 0.12em;
   text-shadow: var(--glow-green);
   line-height: 1.1;
@@ -141,7 +119,7 @@ section[data-testid="stSidebar"] > div {
 section[data-testid="stSidebar"] .stRadio label {
   font-family: var(--font-mono) !important;
   color: var(--text-dim) !important;
-  font-size: 0.83rem !important;
+  font-size: 0.85rem !important;
   letter-spacing: 0.04em !important;
   padding: 0.48rem 0.75rem !important;
   border-radius: var(--radius-sharp) !important;
@@ -155,7 +133,7 @@ section[data-testid="stSidebar"] .stRadio label:hover {
   color: var(--neon-green) !important;
   border-left-color: var(--neon-green) !important;
   background: var(--green-dim) !important;
-  text-shadow: 0 0 8px rgba(0,255,65,0.5) !important;
+  text-shadow: 0 0 8px rgba(0, 255, 65, 0.5) !important;
 }
 
 /* Selected radio item */
@@ -170,7 +148,7 @@ section[data-testid="stSidebar"] .stRadio label:has(+ [aria-checked="true"]) {
 /* Hide default radio dot */
 section[data-testid="stSidebar"] .stRadio [data-testid="stMarkdownContainer"] p {
   font-family: var(--font-mono) !important;
-  font-size: 0.83rem !important;
+  font-size: 0.85rem !important;
 }
 
 /* ── HERO BANNER ──────────────────────────────────────── */
@@ -183,7 +161,7 @@ section[data-testid="stSidebar"] .stRadio [data-testid="stMarkdownContainer"] p 
   border-radius: var(--radius-md);
   padding: 1.6rem 2rem 1.5rem;
   margin-bottom: 1.4rem;
-  box-shadow: var(--glow-green), inset 0 0 80px rgba(0,255,65,0.04);
+  box-shadow: var(--glow-green), inset 0 0 80px rgba(0, 255, 65, 0.04);
   clip-path: polygon(0 0, calc(100% - 20px) 0, 100% 20px, 100% 100%, 20px 100%, 0 calc(100% - 20px));
 }
 
@@ -234,7 +212,7 @@ section[data-testid="stSidebar"] .stRadio [data-testid="stMarkdownContainer"] p 
 
 /* Corner decoration */
 .app-hero::before {
-  content: '// SYS_TLS_FINGERPRINT v1.0';
+  content: '// SYS_TLS_FINGERPRINT v3.5.2';
   position: absolute;
   top: 0.5rem; right: 1rem;
   font-family: var(--font-mono);
@@ -256,7 +234,7 @@ section[data-testid="stSidebar"] .stRadio [data-testid="stMarkdownContainer"] p 
   font-family: var(--font-title) !important;
   font-size: 1.7rem;
   font-weight: 900;
-  color: var(--neon-green);
+  color: #ffffff;
   text-shadow: var(--glow-green);
   letter-spacing: 0.04em;
   margin-bottom: 0.3rem;
@@ -295,17 +273,55 @@ section[data-testid="stSidebar"] .stRadio [data-testid="stMarkdownContainer"] p 
   text-transform: uppercase;
 }
 
+.hero-chip-cyan {
+  background: var(--cyan-dim);
+  border-color: var(--border-cyan);
+  color: var(--neon-cyan);
+}
+
+.hero-chip-magenta {
+  background: var(--magenta-dim);
+  border-color: var(--border-magenta);
+  color: var(--neon-magenta);
+}
+
+.hero-chip-yellow {
+  background: var(--yellow-dim);
+  border-color: var(--border-yellow);
+  color: var(--neon-yellow);
+}
+
+.hero-chip-purple {
+  background: var(--purple-dim);
+  border-color: var(--border-purple);
+  color: var(--neon-purple);
+}
+
 /* ── METRIC CARDS ─────────────────────────────────────── */
+
+/* Force Streamlit columns to stretch children to equal height */
+div[data-testid="stHorizontalBlock"] {
+    align-items: stretch !important;
+}
+div[data-testid="stColumn"] > div,
+div[data-testid="stColumn"] > div > div,
+div[data-testid="stColumn"] > div > div > div {
+    height: 100% !important;
+}
+
 .metric-card {
   position: relative;
   background: var(--bg-card);
-  border: 1px solid var(--border-green);
+  border: 1px solid var(--border-slate);
   border-radius: var(--radius-sharp);
   padding: 1.1rem 1.2rem;
-  min-height: 108px;
+  height: 120px;
+  box-sizing: border-box;
   clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
   transition: border-color 0.2s, box-shadow 0.2s;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .metric-card::before {
@@ -313,7 +329,7 @@ section[data-testid="stSidebar"] .stRadio [data-testid="stMarkdownContainer"] p 
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 2px;
-  background: linear-gradient(90deg, var(--neon-green), var(--neon-cyan));
+  background: linear-gradient(90deg, var(--neon-green), transparent);
 }
 
 .metric-card::after {
@@ -329,6 +345,107 @@ section[data-testid="stSidebar"] .stRadio [data-testid="stMarkdownContainer"] p 
   box-shadow: var(--glow-green);
 }
 
+/* --- Metric Color Variations --- */
+
+/* Cyan Variant */
+.metric-color-cyan {
+  border-color: var(--border-slate);
+}
+.metric-color-cyan::before {
+  background: linear-gradient(90deg, var(--neon-cyan), transparent) !important;
+}
+.metric-color-cyan::after {
+  background: linear-gradient(0deg, var(--neon-cyan), transparent) !important;
+}
+.metric-color-cyan .metric-value {
+  color: var(--neon-cyan) !important;
+  text-shadow: var(--glow-cyan) !important;
+}
+.metric-color-cyan:hover {
+  border-color: var(--neon-cyan) !important;
+  box-shadow: var(--glow-cyan) !important;
+}
+
+/* Magenta Variant */
+.metric-color-magenta {
+  border-color: var(--border-slate);
+}
+.metric-color-magenta::before {
+  background: linear-gradient(90deg, var(--neon-magenta), transparent) !important;
+}
+.metric-color-magenta::after {
+  background: linear-gradient(0deg, var(--neon-magenta), transparent) !important;
+}
+.metric-color-magenta .metric-value {
+  color: var(--neon-magenta) !important;
+  text-shadow: var(--glow-magenta) !important;
+}
+.metric-color-magenta:hover {
+  border-color: var(--neon-magenta) !important;
+  box-shadow: var(--glow-magenta) !important;
+}
+
+/* Yellow Variant */
+.metric-color-yellow {
+  border-color: var(--border-slate);
+}
+.metric-color-yellow::before {
+  background: linear-gradient(90deg, var(--neon-yellow), transparent) !important;
+}
+.metric-color-yellow::after {
+  background: linear-gradient(0deg, var(--neon-yellow), transparent) !important;
+}
+.metric-color-yellow .metric-value {
+  color: var(--neon-yellow) !important;
+  text-shadow: var(--glow-yellow) !important;
+}
+.metric-color-yellow:hover {
+  border-color: var(--neon-yellow) !important;
+  box-shadow: var(--glow-yellow) !important;
+}
+
+/* Purple Variant */
+.metric-color-purple {
+  border-color: var(--border-slate);
+}
+.metric-color-purple::before {
+  background: linear-gradient(90deg, var(--neon-purple), transparent) !important;
+}
+.metric-color-purple::after {
+  background: linear-gradient(0deg, var(--neon-purple), transparent) !important;
+}
+.metric-color-purple .metric-value {
+  color: var(--neon-purple) !important;
+  text-shadow: 0 0 8px rgba(180, 0, 255, 0.4), 0 0 20px rgba(180, 0, 255, 0.1) !important;
+}
+.metric-color-purple:hover {
+  border-color: var(--neon-purple) !important;
+  box-shadow: 0 0 8px rgba(180, 0, 255, 0.4), 0 0 20px rgba(180, 0, 255, 0.1) !important;
+}
+
+/* Green Variant (default override explicit) */
+.metric-color-green {
+  border-color: var(--border-slate);
+}
+.metric-color-green::before {
+  background: linear-gradient(90deg, var(--neon-green), transparent) !important;
+}
+.metric-color-green::after {
+  background: linear-gradient(0deg, var(--neon-green), transparent) !important;
+}
+.metric-color-green .metric-value {
+  color: var(--neon-green) !important;
+  text-shadow: var(--glow-green) !important;
+}
+.metric-color-green:hover {
+  border-color: var(--neon-green) !important;
+  box-shadow: var(--glow-green) !important;
+}
+
+.metric-card-lg {
+  height: 200px;
+}
+
 .metric-label {
   font-family: var(--font-mono);
   color: var(--text-dim);
@@ -336,24 +453,34 @@ section[data-testid="stSidebar"] .stRadio [data-testid="stMarkdownContainer"] p 
   letter-spacing: 0.1em;
   text-transform: uppercase;
   margin-bottom: 0.45rem;
+  flex-shrink: 0;
 }
 
 .metric-value {
   font-family: var(--font-title);
   color: var(--neon-green);
-  font-size: 2rem;
+  font-size: 1.6rem;
   font-weight: 700;
-  line-height: 1.05;
+  line-height: 1.15;
   text-shadow: var(--glow-green);
   letter-spacing: -0.02em;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .metric-footnote {
-  margin-top: 0.5rem;
+  margin-top: auto;
+  padding-top: 0.4rem;
   font-family: var(--font-mono);
   color: var(--text-muted);
   font-size: 0.68rem;
   letter-spacing: 0.04em;
+  flex-shrink: 0;
 }
 
 /* ── SECTION HEADERS ─────────────────────────────────── */
@@ -382,7 +509,7 @@ section[data-testid="stSidebar"] .stRadio [data-testid="stMarkdownContainer"] p 
 /* ── SECTION CARD ────────────────────────────────────── */
 .section-card {
   background: var(--bg-card);
-  border: 1px solid var(--border-green);
+  border: 1px solid var(--border-slate);
   border-radius: var(--radius-sharp);
   padding: 1rem 1.1rem;
   margin-bottom: 1rem;
@@ -441,9 +568,9 @@ section[data-testid="stSidebar"] .stRadio [data-testid="stMarkdownContainer"] p 
 
 /* ── SIDEBAR NAV HELPER ──────────────────────────────── */
 .nav-helper {
-  background: rgba(0,255,65,0.04);
-  border: 1px solid var(--border-green);
-  border-left: 3px solid var(--neon-green);
+  background: rgba(255, 159, 0, 0.03) !important;
+  border: 1px solid var(--border-green) !important;
+  border-left: 3px solid var(--neon-green) !important;
   border-radius: var(--radius-sharp);
   padding: 0.8rem 0.9rem;
   margin-bottom: 0.85rem;
@@ -470,7 +597,7 @@ section[data-testid="stSidebar"] .stRadio [data-testid="stMarkdownContainer"] p 
 
 /* ── LOG CONSOLE ─────────────────────────────────────── */
 .log-console {
-  background: #020308;
+  background: #020804;
   border-radius: var(--radius-sharp);
   padding: 0.9rem 1rem;
   border: 1px solid var(--border-green);
@@ -528,7 +655,7 @@ section[data-testid="stSidebar"] .stRadio [data-testid="stMarkdownContainer"] p 
 /* ── INFO PANELS ─────────────────────────────────────── */
 .info-panel {
   background: var(--bg-card);
-  border: 1px solid var(--border-green);
+  border: 1px solid var(--border-slate);
   border-radius: var(--radius-sharp);
   padding: 0.9rem 1rem;
   margin-bottom: 0.75rem;
@@ -537,8 +664,8 @@ section[data-testid="stSidebar"] .stRadio [data-testid="stMarkdownContainer"] p 
 }
 
 .info-panel:hover {
-  border-color: var(--neon-green);
-  box-shadow: var(--glow-green);
+  border-color: var(--neon-cyan);
+  box-shadow: var(--glow-cyan);
 }
 
 .info-title {
@@ -646,8 +773,14 @@ div[data-testid="stMetric"] {
 
 /* Dataframes */
 div[data-testid="stDataFrame"] {
-  border: 1px solid var(--border-green) !important;
+  border: 1px solid var(--border-slate) !important;
   border-radius: var(--radius-sharp) !important;
+  box-shadow: none !important;
+  transition: border-color 0.2s, box-shadow 0.2s !important;
+}
+
+div[data-testid="stDataFrame"]:hover {
+  border-color: var(--border-green) !important;
   box-shadow: var(--glow-green) !important;
 }
 
@@ -671,17 +804,28 @@ div[data-testid="stDataFrame"] td {
 /* Plotly */
 div[data-testid="stPlotlyChart"] {
   background: var(--bg-elevated) !important;
-  border: 1px solid var(--border-green) !important;
+  border: 1px solid var(--border-slate) !important;
   border-radius: var(--radius-sharp) !important;
-  box-shadow: var(--glow-green) !important;
+  box-shadow: none !important;
+  transition: border-color 0.2s, box-shadow 0.2s !important;
+}
+
+div[data-testid="stPlotlyChart"]:hover {
+  border-color: var(--neon-cyan) !important;
+  box-shadow: var(--glow-cyan) !important;
 }
 
 /* Expanders */
 details[data-testid="stExpander"] {
   background: var(--bg-card) !important;
-  border: 1px solid var(--border-green) !important;
+  border: 1px solid var(--border-slate) !important;
   border-radius: var(--radius-sharp) !important;
   margin-bottom: 0.5rem !important;
+  transition: border-color 0.2s !important;
+}
+
+details[data-testid="stExpander"]:hover {
+  border-color: var(--neon-green) !important;
 }
 
 details[data-testid="stExpander"] summary {
@@ -695,18 +839,32 @@ details[data-testid="stExpander"] summary {
 div[data-testid="stSelectbox"] > div > div,
 div[data-testid="stTextInput"] input {
   background: var(--bg-elevated) !important;
-  border-color: var(--border-green) !important;
+  border-color: var(--border-slate) !important;
   border-radius: var(--radius-sharp) !important;
   color: var(--text-terminal) !important;
   font-family: var(--font-mono) !important;
   font-size: 0.82rem !important;
+  transition: border-color 0.2s !important;
+}
+
+div[data-testid="stSelectbox"] > div > div:hover,
+div[data-testid="stTextInput"] input:hover,
+div[data-testid="stSelectbox"] > div > div:focus-within,
+div[data-testid="stTextInput"] input:focus {
+  border-color: var(--neon-green) !important;
 }
 
 div[data-testid="stNumberInput"] input {
   background: var(--bg-elevated) !important;
   color: var(--neon-green) !important;
-  border-color: var(--border-green) !important;
+  border-color: var(--border-slate) !important;
   font-family: var(--font-mono) !important;
+  transition: border-color 0.2s !important;
+}
+
+div[data-testid="stNumberInput"] input:hover,
+div[data-testid="stNumberInput"] input:focus {
+  border-color: var(--neon-green) !important;
 }
 
 /* Buttons */
@@ -766,4 +924,33 @@ h1, h2, h3 {
   background: var(--neon-green);
   border-radius: 2px;
   box-shadow: var(--glow-green);
+}
+
+/* ============================================================
+   CUSTOM THEME & LAYOUT OVERRIDES
+   (Background, sidebar, and radio handled by inline injection
+    in dashboard.py for guaranteed load order)
+   ============================================================ */
+
+/* Make sure all text is white */
+.stMarkdown, .stTitle, .stHeader, .stSubheader, .stCaption,
+label, .stSelectbox, .stMultiSelect, .stNumberInput,
+.stTextArea, .stTextInput, .stButton, .stCheckbox, .stRadio {
+    color: #ffffff !important;
+}
+
+/* Fix input fields background so text is readable */
+input, textarea, .stTextInput > div > div > input {
+    background-color: var(--bg-surface) !important;
+    color: #ffffff !important;
+}
+
+/* ── CARD & PANEL BACKGROUNDS ──────────────────────────── */
+.app-hero, .metric-card, .section-card, .info-panel, .log-console, .status-item,
+details[data-testid="stExpander"],
+div[data-testid="stSelectbox"] > div > div,
+div[data-testid="stTextInput"] input,
+div[data-testid="stNumberInput"] input,
+div[data-testid="stButton"] button {
+    background-color: var(--bg-surface) !important;
 }

@@ -46,12 +46,12 @@ class SystemController:
         worker_thread.daemon = True
         worker_thread.start()
         
-        try:
-            start_sniffer(INTERFACE, self.on_packet_received)
-        except PermissionError:
-            logging.error("Root/Sudo privileges required for sniffing!")
-            self.running = False
-            sys.exit(1)
+        #try:
+        #   start_sniffer(INTERFACE, self.on_packet_received)
+        #except PermissionError:
+        #    logging.error("Root/Sudo privileges required for sniffing!")
+        #    self.running = False
+        #    sys.exit(1)
 
     def on_packet_received(self, features, dst_ip):
         self.packet_queue.put((features, dst_ip))

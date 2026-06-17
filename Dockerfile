@@ -27,7 +27,8 @@ ENV PATH=/root/.local/bin:$PATH
 COPY . .
 
 ENV PATH=/root/.local/bin:$PATH
-
+# RAG veritabanını doğrudan imajın içine kopyala (Artık enjekte etmene gerek yok!)
+COPY ./data/fingerprints.db /app/data/fingerprints.db
 CMD ["python", "app/main.py"]
 
 # Separated stages for establishing Kubernetes pod efficiency and minimal delay for pod opening/closing operations.

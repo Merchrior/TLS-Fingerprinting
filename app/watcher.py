@@ -1,7 +1,7 @@
 import time
 import os
 import logging
-import threading # Ensure threading is imported
+import threading
 from pathlib import Path
 from app.extractor import process_pcap_file
 from app.models.predictor import TrafficClassifier
@@ -20,12 +20,8 @@ def parse_ja4_metadata(ja4_hash):
     
     try:
         proto = "TCP" if part_a[0] == 't' else "QUIC/UDP"
-        
-        # FIX: Look at the 3rd character for the version (t12 -> 2, t13 -> 3)
         tls_ver = "TLS 1.3" if part_a[1:3] == "13" else "TLS 1.2"
-        
         sni = "with a Server Name (SNI)" if part_a[3] == 'd' else "using direct IP routing"
-        
         return f"{proto} connection using {tls_ver} {sni}"
     except:
         return "Standard TLS connection"
@@ -43,35 +39,26 @@ def on_packet_received(features, dst_ip):
         logging.info(f"DEBUG - Extracted Pattern: {features}")
         logging.info("=" * 50)
 
-        # Note: Live packet capture from Scapy doesn't automatically generate JA3/JA4 
-        # in the current collector.py setup. We'll use the pattern for RAG/AI.
-        
-        # 1. SEARCH RAG DATABASE FIRST
-        candidates = rag_db.search(discovered_pattern=features)
-        logging.info(f"DEBUG - RAG Found Candidates: {candidates}")
-        
-        # 2. FEED CANDIDATES TO AI
         label, conf = classifier.classify_traffic(
             features, 
-            candidate_apps=candidates, 
-            ja4_hint="Standard TLS connection" # Default hint for live packets
+            sni="Unknown", 
+            ja4_hint="Standard TLS connection"
         )
         
         logging.info(f"DEBUG - AI Verdict: {label} ({conf*100:.1f}%)")
         
-        # 3. APPLY CONFIDENCE THRESHOLD
-        if conf < 0.20:
-            final_pred = "Unknown Traffic"
-        else:
-            final_pred = label
+        final_pred = "Unknown Traffic" if conf < 0.20 else label
 
-        # 4. LOG TO POSTGRES
+        # 🚀 HATA DÜZELTİLDİ: sni="Unknown" ve dst_port=0 eklendi
         db.log_event(
-            src="Live Capture", # Or extract src_ip if available in collector.py
-            dst=dst_ip, 
+            src="Live Capture", 
+            dst=dst_ip,
+            dst_port=0,
             ja3="N/A (Live)",
             pred=final_pred,           
-            threat="Safe"              
+            threat="Safe",       
+            sni="Unknown",       
+            confidence=conf       
         )
         
     except Exception as e:
@@ -82,16 +69,6 @@ def start_pcap_watcher(directory="/app/data"):
     processed_files = set()
 
     while True:
-        # --- NEW: UI Command Checker ---
-        cmd = db.get_config("sniffing_command")
-        if cmd == "START":
-            logging.info("!!! UI üzerinden BAŞLAT komutu alındı. Sniffer devreye giriyor...")
-            # Komutu hemen sıfırlayalım ki sürekli başlamasın
-            db.set_config("sniffing_command", "IDLE")
-            # Sniffer'ı ayrı bir işlem olarak başlat
-            threading.Thread(target=start_sniffer, args=("eth0", on_packet_received), daemon=True).start()
-        # --------------------------------
-
         pcap_files = [f for f in os.listdir(directory) if f.endswith(".pcap")]
         
         for file_name in pcap_files:
@@ -101,7 +78,6 @@ def start_pcap_watcher(directory="/app/data"):
                 continue
                 
             try:
-                # Dosya biz bakarken silinmiş mi diye kontrol et
                 if not os.path.exists(file_path):
                     continue
                     
@@ -110,59 +86,36 @@ def start_pcap_watcher(directory="/app/data"):
                     
                     for record in records:
                         pattern = record.get('discovered_pattern', [])
+                        
+                        # 🚀 HATA DÜZELTİLDİ: Değişkenler AI'dan ÖNCE tanımlandı!
+                        sni_val = record.get('sni', 'Unknown')
+                        ja4_hint = parse_ja4_metadata(record.get('ja4_hash')) if record.get('ja4_hash') else "Unknown"
+                        
                         logging.info(f"DEBUG - Extracted Pattern: {pattern}")
                         logging.info("=" * 50)
                         logging.info(f"MY JA3 HASH IS: {record.get('ja3_hash')}")
                         logging.info(f"MY JA4 HASH IS: {record.get('ja4_hash')}")
+                        logging.info(f"SNI HEDEFİ: {sni_val}")
                         logging.info("=" * 50)
                         
-                        candidates = rag_db.search(
-                            discovered_pattern=pattern,
-                            ja3=record.get('ja3_hash'),
-                            ja4=record.get('ja4_hash')
+                        label, conf = classifier.classify_traffic(
+                            pattern, 
+                            ja4_hint=ja4_hint,
+                            sni=sni_val 
                         )
                         
-                        logging.info(f"DEBUG - RAG Found Candidates: {candidates}")
-                        
-                        ja4_hint = parse_ja4_metadata(record.get('ja4_hash')) if record.get('ja4_hash') else "Unknown"
-                        
-                        # --- YENİ MANTIK KONTROLÜ ---
-                        if candidates and "(Demo Verified)" in candidates[0]:
-                            label = candidates[0]
-                            conf = 0.99  
-                            logging.info(f"FAST-PATH: Exact match found in DB.")
-                        else:
-                            sorted_pattern = sorted(pattern) 
-                            pattern_str = str(sorted_pattern)
-                            
-                            # AI'a sor
-                            label, conf = classifier.classify_traffic(
-                                pattern, 
-                                candidate_apps=candidates, 
-                                ja4_hint=ja4_hint,
-                            )
-                            
-                            # Eğer AI, RAG'ın adaylarını reddedip kendi sonucunu %80+ güvenle bulduysa, 
-                            # RAG'ın aday listesini loglarda "ez" ki kafa karışıklığı olmasın.
-                            if candidates and label not in candidates and conf > 0.80:
-                                logging.info(f"AI OVERRIDE: RAG candidates ignored due to multi-dimensional mismatch. AI is confident.")
-                                candidates = [label] # Arayüzde sadece AI'ın bulduğu görünsün
-                        
-                        
                         logging.info(f"DEBUG - AI Verdict: {label} ({conf*100:.1f}%)")
-                        
-                        if conf < 0.20:
-                            final_pred = "Unknown Traffic"
-                        else:
-                            final_pred = label
+                        final_pred = "Unknown Traffic" if conf < 0.20 else label
 
                         db.log_event(
                             src=record.get('src_ip'), 
                             dst=record.get('dst_ip'), 
                             dst_port=record.get('dst_port'),
                             ja3=record.get('ja3_hash'),
-                            pred=final_pred,           
-                            threat="Safe"              
+                            pred=final_pred,     
+                            threat="Safe",
+                            sni=sni_val,
+                            confidence=conf
                         )
                     
                     logging.info(f"Successfully processed {len(records)} records from {file_name}")

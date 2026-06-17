@@ -4,7 +4,7 @@
 # powershell -ExecutionPolicy Bypass -File .\pcap-sync.ps1
 # Stop: Ctrl+C
 
-$LOCAL_DATA_DIR = "C:\Users\ahmet\Downloads\proje\data"
+$LOCAL_DATA_DIR = "C:\Users\hp\Documents\TLS-Fingerprinting\data"
 $NAMESPACE = "tls-fingerprinting"
 $APP_LABEL = "app=tls-app"
 $REMOTE_DIR = "/app/data"

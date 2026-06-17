@@ -1,0 +1,4 @@
+python host_agent.py
+kubectl -n tls-fingerprinting port-forward pod/tls-postgres-0 30543:5432
+kubectl -n tls-fingerprinting port-forward svc/tls-dashboard 8501:8501
+powershell -ExecutionPolicy Bypass -File .\pcap-sync.ps1

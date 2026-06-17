@@ -25,6 +25,8 @@ TSHARK_FIELDS = [
     "tls.handshake.extension.type",
     "tls.handshake.extensions_supported_group",
     "tls.handshake.extensions_ec_point_format",
+    "tls.handshake.extensions_server_name",
+    "ssl.handshake.extensions_server_name"
 ]
 
 # RFC 8701 GREASE values — filtered out of JA3 computation
@@ -111,6 +113,7 @@ def _build_tshark_command(pcap_file: str, tshark_path: Optional[str] = None) -> 
     cmd = [
         resolve_tshark_path(tshark_path),
         "-r", pcap_file,
+        "-2",
         "-Y", "tls.handshake.type==1",
         "-T", "fields",
         "-E", "header=y",
@@ -175,6 +178,27 @@ def extract_client_hello_records(
             transport = "TCP"
         else:
             transport = "Unknown"
+        sni_raw = row.get("tls.handshake.extensions_server_name", "")
+        if not sni_raw:
+            sni_raw = row.get("ssl.handshake.extensions_server_name", "")
+            
+        if isinstance(sni_raw, list):
+            sni_raw = sni_raw[0]
+            
+        final_sni = str(sni_raw).strip() if sni_raw else "Unknown"
+
+        # 🚀 SON SİLAH: TShark hala kör olursa, PCAP dosyasının beynine girip adresi zorla alıyoruz!
+        if final_sni == "Unknown":
+            try:
+                import re
+                with open(pcap_file, "rb") as f:
+                    data = f.read()
+                    # TLS SNI Byte İmzası: 00 00 (Tip) + Uzunluklar + 00 (Host) + Uzunluk + Domain Adı
+                    match = re.search(b'\x00\x00.{4}\x00.{2}([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', data, re.DOTALL)
+                    if match:
+                        final_sni = match.group(1).decode('utf-8', errors='ignore')
+            except Exception:
+                pass
 
         record = {
             "timestamp_epoch": row.get("frame.time_epoch"),
@@ -186,6 +210,7 @@ def extract_client_hello_records(
             "tls_version": normalize_tls_version(row.get("tls.handshake.version")),
             "ja3_string": ja3_string,
             "ja3_hash": ja3_hash,
+            "sni": final_sni,
             "raw_metadata": json.dumps(
                 {
                     "transport": transport,
@@ -209,7 +234,7 @@ def write_records_to_csv(records: List[Dict[str, object]], output_csv: str) -> N
 
     fieldnames = [
         "timestamp_epoch", "src_ip", "dst_ip", "src_port", "dst_port",
-        "tls_version", "ja3_string", "ja3_hash", "raw_metadata",
+        "tls_version", "ja3_string", "ja3_hash", "sni", "raw_metadata",
     ]
 
     with open(output_path, "w", newline="", encoding="utf-8") as f:

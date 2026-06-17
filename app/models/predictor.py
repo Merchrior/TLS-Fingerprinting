@@ -13,13 +13,13 @@ class TrafficClassifier:
             self.model_dir = model_dir
             
         self.pipe = None
-        self.inference_cache = {}  # 🚀 YENİ: Yapay Zeka Önbelleği (Makaledeki 0.5ms Fast-Path)
+        self.inference_cache = {}
         self._load_models()
 
     def _load_models(self):
         try:
             if not os.path.exists(self.model_dir):
-                logger.warning("⚠️ Model klasörü bulunamadı! Lütfen train_ai.py çalıştırın.")
+                logger.warning("Model directory not found. Please run train_ai.py.")
                 return
             
             self.pipe = pipeline(
@@ -29,50 +29,47 @@ class TrafficClassifier:
                 truncation=True,
                 max_length=128
             )
-            logger.info("✅ Transformatör (SecBERT) Modeli başarıyla yüklendi!")
+            logger.info("Transformer (SecBERT) model loaded successfully.")
         except Exception as e:
-            logger.error(f"❌ Model yükleme hatası: {e}")
+            logger.error(f"Model loading error: {e}")
 
     def predict(self, input_data: any) -> str:
         label, _ = self.classify_traffic(input_data)
         return label
 
-    def classify_traffic(self, pattern: list, candidate_apps: list = None, ja4_hint: str = "", **kwargs) -> tuple:
+    def classify_traffic(self, pattern: list, ja4_hint: str = "", sni: str = "", **kwargs) -> tuple:
         if not self.pipe:
             return "Unknown Traffic (Model Not Loaded)", 0.0
 
         try:
-            # 1. Şifre listesini metne çevir
+            # 1. Convert cipher list to string
             pattern_str = ", ".join(pattern)
             
-            # 🚀 2. CACHE KONTROLÜ (Makaledeki 0.5 ms'lik Lookup mekanizması)
+            # 2. Cache Check (0.5ms fast-path lookup)
             if pattern_str in self.inference_cache:
                 cached_label, cached_conf = self.inference_cache[pattern_str]
-                logger.info(f"⚡ CACHE HIT: AI bu dizilimi hatırladı! Süre: 0.5ms -> {cached_label} ({cached_conf*100:.2f}%)")
+                logger.info(f"CACHE HIT: Pattern remembered. Time: 0.5ms -> {cached_label} ({cached_conf*100:.2f}%)")
                 return cached_label, cached_conf
 
-            # 3. Cache'de yoksa SecBERT'e sor
+            # 3. Query SecBERT
             result = self.pipe(pattern_str)[0]
             best_label = result['label']
             confidence = result['score']
 
-            # 4. RAG Adayları Filtrelemesi
-            if candidate_apps and len(candidate_apps) > 0:
-                if best_label in candidate_apps and confidence > 0.15:
-                    logger.info(f"🎯 AI REFINED: RAG + SecBERT mutabakatı sağlandı ({best_label})")
-                elif confidence > 0.80:
-                    logger.info(f"🧠 AI OVERRIDE: RAG adayları reddedildi, SecBERT semantik analize güveniyor.")
-
-            # 🚀 5. SONUCU CACHE'E KAYDET (Gelecekteki aynı paketler için)
+            # 4. Save result to cache
             self.inference_cache[pattern_str] = (best_label, float(confidence))
 
-            logger.info("--- 🤖 SecBERT Semantic Breakdown ---")
-            logger.info(f"  -> {best_label}: {confidence*100:.2f}%")
+            # 5. Logging Output
+            logger.info("--- SecBERT Semantic Breakdown ---")
+            logger.info(f"  -> AI Cryptographic Decision: {best_label} ({confidence*100:.2f}%)")
+            
+            if sni and sni != "Unknown":
+                logger.info(f"  -> Context Engine (SNI Target): {sni}")
             
             return best_label, float(confidence)
 
         except Exception as e:
-            logger.error(f"Tahminleme sırasında kritik hata: {e}")
+            logger.error(f"Critical error during prediction: {e}")
             return "Unknown Traffic", 0.0
 
 def create_classifier(**kwargs):

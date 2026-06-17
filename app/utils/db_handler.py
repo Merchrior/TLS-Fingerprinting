@@ -39,14 +39,21 @@ class DatabaseManager:
             dst_port INTEGER,
             ja3_hash VARCHAR(32),
             prediction VARCHAR(50),
-            threat_level VARCHAR(20)
+            threat_level VARCHAR(20),
+            sni VARCHAR(255),       
+            confidence FLOAT
         );
         """
         # Try to add dst_port if the table already exists from earlier
         try:
             self.execute_query("ALTER TABLE tls_events ADD COLUMN dst_port INTEGER;")
+            
         except:
             pass # Column already exists, ignore error
+        try: self.execute_query("ALTER TABLE tls_events ADD COLUMN sni VARCHAR(255);")
+        except: pass
+        try: self.execute_query("ALTER TABLE tls_events ADD COLUMN confidence FLOAT;")
+        except: pass
             
         # 2. Add System Logs table for the UI Console
         query_logs = """
@@ -74,10 +81,10 @@ class DatabaseManager:
         query = "INSERT INTO system_logs (level, component, message) VALUES (%s, %s, %s)"
         self.execute_query(query, (level, component, message))
 
-    def log_event(self, src, dst, dst_port, ja3, pred="Analyzing", threat="Unknown"):
+    def log_event(self, src, dst, dst_port, ja3, pred="Analyzing", threat="Unknown",sni="Unknown", confidence=0.0):
         """Logs a single TLS event to the database (Updated to include port)."""
-        query = "INSERT INTO tls_events (src_ip, dst_ip, dst_port, ja3_hash, prediction, threat_level) VALUES (%s, %s, %s, %s, %s, %s)"
-        self.execute_query(query, (src, dst, dst_port, ja3, pred, threat))
+        query = "INSERT INTO tls_events (src_ip, dst_ip, dst_port, ja3_hash, prediction, threat_level, sni, confidence) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
+        self.execute_query(query, (src, dst, dst_port, ja3, pred, threat, sni, confidence))
 
     def execute_query(self, query, params=None):
         """Thread-safe query execution."""
