@@ -40,21 +40,9 @@ class UIDatabaseAdapter:
         # 🚀 ÇÖZÜM 1: PCAP loglarını ILIKE (esnek) ve geniş jokerle arıyoruz!
         pcaps = self._fetch("SELECT COUNT(*) as c FROM system_logs WHERE message ILIKE %s", ('%Processed PCAP%',))
         
-        # 🚀 ÇÖZÜM 2 (REVISED): win_sniff_cmd is a one-shot COMMAND, not a status flag —
-        # host_agent.py flips it to 'IDLE' the instant it launches TShark, so it only
-        # reads 'START' for ~2 seconds. Instead, derive "Active" from real recent
-        # activity: has a PCAP actually been processed in the last ACTIVE_WINDOW_SECONDS?
-        last_activity = self._fetch(
-            "SELECT EXTRACT(EPOCH FROM (NOW() - MAX(timestamp))) as seconds_ago "
-            "FROM system_logs WHERE message ILIKE %s", ('%Processed PCAP%',)
-        )
-        seconds_ago = (
-            last_activity[0]['seconds_ago']
-            if last_activity and last_activity[0]['seconds_ago'] is not None
-            else None
-        )
-        ACTIVE_WINDOW_SECONDS = 90  # a bit more than one ring_duration cycle (default 30s)
-        is_active = 1 if seconds_ago is not None and seconds_ago < ACTIVE_WINDOW_SECONDS else 0
+        # 🚀 ÇÖZÜM 2: Butona basıldığında durumu (START/STOP) gerçek zamanlı okuyoruz!
+        cmd_state = self._fetch("SELECT value FROM system_config WHERE key = 'win_sniff_cmd'")
+        is_active = 1 if cmd_state and cmd_state[0]['value'] == 'START' else 0
         
         # Gelecekte eklenecek tablolar için güvenli sorgular (Tablo yoksa 0 döner)
         cand = self._fetch("SELECT COUNT(*) as c FROM candidates")
@@ -372,16 +360,6 @@ def format_file_size(size: Optional[int]) -> str:
     return f"{size:.1f} TB"
 
 
-def format_confidence_column(df: pd.DataFrame, column: str = "confidence") -> pd.DataFrame:
-    """Render a 0.0–1.0 confidence float as a percentage string (e.g. 0.8951 -> '89.5%')."""
-    if column in df.columns:
-        df = df.copy()
-        df[column] = df[column].apply(
-            lambda v: f"{float(v) * 100:.1f}%" if pd.notna(v) else "-"
-        )
-    return df
-
-
 def render_capture_config_warning(db: UIDatabaseAdapter) -> None:
     configured_interface = db.get_config("capture_interface", "") or ""
     if not configured_interface:
@@ -633,7 +611,6 @@ def render_overview(db: UIDatabaseAdapter, table_limit: int) -> None:
         df   = pd.DataFrame(recent_events)
         # Added sni to the display columns
         cols = [c for c in ["timestamp", "dst_ip", "dst_port", "sni", "ja3_hash", "prediction", "confidence", "status"] if c in df.columns]
-        df = format_confidence_column(df)
         st.dataframe(df[cols], use_container_width=True, hide_index=True)
     else:
         empty_state("No Recent Events", "The backend is ready. Once capture or PCAP processing begins, detections will show up here.")
@@ -724,7 +701,6 @@ def render_live_monitor(db: UIDatabaseAdapter, table_limit: int) -> None:
             df   = pd.DataFrame(recent_events)
             # Added sni and confidence to the display columns
             cols = [c for c in ["timestamp", "dst_ip", "dst_port", "sni", "ja3_hash", "prediction", "confidence", "status"] if c in df.columns]
-            df = format_confidence_column(df)
             st.dataframe(df[cols], use_container_width=True, hide_index=True)
         else:
             empty_state("No Detections Yet", "Run the backend with capture enabled or process a PCAP file to populate detections.")
@@ -876,7 +852,6 @@ def render_whitelist(db: UIDatabaseAdapter, table_limit: int) -> None:
 
         df   = df.head(table_limit)
         cols = [c for c in ["created_at", "app_name", "ja3_hash", "category", "confidence", "source", "notes"] if c in df.columns]
-        df = format_confidence_column(df)
         st.dataframe(df[cols], use_container_width=True, hide_index=True)
     else:
         empty_state("Whitelist Is Empty", "You can seed demo entries from Settings or add mappings later through the database/API flow.")

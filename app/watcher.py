@@ -85,11 +85,18 @@ def start_pcap_watcher(directory="/app/data"):
                     records = process_pcap_file(file_path)
                     
                     for record in records:
-                        pattern = record.get('discovered_pattern', [])
+                        # 🚀 CATCH TSHARK FORMAT: Reconstruct pattern from ja3_string if discovered_pattern is missing
+                        pattern = record.get('discovered_pattern')
+                        if not pattern:
+                            ja3_str = str(record.get('ja3_string', ''))
+                            # Convert TShark's numeric JA3 string (e.g., "771,4865-4866...") into a feature list for the AI
+                            pattern = [p.strip() for p in ja3_str.replace(',', '-').split('-') if p.strip()]
                         
-                        # 🚀 HATA DÜZELTİLDİ: Değişkenler AI'dan ÖNCE tanımlandı!
                         sni_val = record.get('sni', 'Unknown')
-                        ja4_hint = parse_ja4_metadata(record.get('ja4_hash')) if record.get('ja4_hash') else "Unknown"
+                        
+                        # Fallback gracefully if JA4 is missing in TShark version
+                        ja4_raw = record.get('ja4_hash')
+                        ja4_hint = parse_ja4_metadata(ja4_raw) if ja4_raw else "Standard encrypted traffic"
                         
                         logging.info(f"DEBUG - Extracted Pattern: {pattern}")
                         logging.info("=" * 50)
